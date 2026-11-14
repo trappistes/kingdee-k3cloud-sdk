@@ -279,4 +279,4 @@ rm -rf vendor/trappistes && composer update trappistes/kingdee-k3cloud-sdk --pre
 
 签名认证实现派生自 MIT 许可的 [`kingdee-php/k3cloud`](https://github.com/kingdee-php/k3cloud)，
 其协议端点与报文结构亦与该实现等价。本包以 MIT 许可发布，
-详见 [LICENSE](LICENSE) 与 [README 的致谢章节](README.md)。
+详见 [LICENSE](LICENSE)、[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) 与 [README 的致谢章节](README.md)。

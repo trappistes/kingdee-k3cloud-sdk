@@ -579,7 +579,7 @@ CI 矩阵覆盖 PHP 7.4 / 8.1 / 8.3 / 8.4，另含 `--prefer-lowest` 依赖下�
 
 ## 许可证
 
-**MIT**（见 [LICENSE](LICENSE)）。
+**MIT**（见 [LICENSE](LICENSE)）；第三方声明见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
 
 本包为独立开源项目，与任何商业实体无隶属或授权关系。
 

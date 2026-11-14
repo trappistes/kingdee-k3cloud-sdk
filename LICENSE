@@ -19,14 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-THIRD-PARTY NOTICES
-
-This package's signature-authentication implementation (`src/Signer.php`) was
-derived from the MIT-licensed `kingdee-php/k3cloud`:
-https://github.com/kingdee-php/k3cloud
-
-The endpoint paths in `src/Endpoints.php` follow Kingdee's official WebAPI
-specification, as does that project.

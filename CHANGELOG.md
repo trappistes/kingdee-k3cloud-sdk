@@ -61,7 +61,7 @@
 
 - 公开 API 自本版起冻结，beta 期间仅做向后兼容补充
 - 写操作不自动重试：网络超时后服务端是否已执行未知，须由调用方按业务单号幂等对账
-- 本包以 MIT 许可发布；签名实现派生自 MIT 许可的 `kingdee-php/k3cloud`，致谢见 README 与 LICENSE
+- 本包以 MIT 许可发布；签名实现派生自 MIT 许可的 `kingdee-php/k3cloud`，致谢见 README 与 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
 
 ---
 
