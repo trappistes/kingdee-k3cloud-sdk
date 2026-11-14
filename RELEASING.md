@@ -61,20 +61,21 @@
 ## 4. 测试矩阵
 
 > 本仓库为**独立仓库**（包目录即仓库根），CI 工作流位于仓库根目录的
-> `.github/workflows/sdk-tests.yml`，**不包含** `defaults.run.working-directory`。
+> `.github/workflows/sdk-tests.yml`。
 
 ### 4.1 本地验证
 
 ```bash
-# 安装依赖（库不提交 composer.lock，每次按最新可用版本解析）
-composer update --prefer-dist --no-interaction
+composer update --prefer-dist --no-interaction   # 库不提交 composer.lock
+composer check        # 静态分析 + 测试（与 CI 同一串命令）
+composer analyze     # PHPStan level 5
+composer test        # PHPUnit
+```
 
-# 全量检查：静态分析 + 测试（与 CI 同一串命令）
-composer check
+PHP 7.4 需单独验证：
 
-# 单项
-composer analyze   # PHPStan level 5
-composer test      # PHPUnit
+```bash
+find src tests -name '*.php' -print0 | xargs -0 -n1 php7.4 -l
 ```
 
 ### 4.2 CI 矩阵
@@ -86,18 +87,7 @@ composer test      # PHPUnit
 | `analyze` | 8.4 | `composer analyze`（独立 job，避免 7.4 工具链兼容问题） |
 
 **PHP 7.4 的兼容性由真实执行保证**（矩阵中实际跑完测试套件），而非静态分析推断——
-这比固定 `phpVersion` 的做法更可靠：后者会让 `\CurlHandle` 这类
-PHP 8.0+ 才存在的符号产生「未知类」误报。
-
-### 4.3 手动多版本验证
-
-```bash
-# 各 PHP 版本分别执行（PHP 7.4 必须单独验证）
-php vendor/bin/phpunit -c phpunit.xml
-
-# PHP 7.4 全量语法检查
-find src tests -name '*.php' -print0 | xargs -0 -n1 php7.4 -l
-```
+固定 `phpVersion` 会让 `\CurlHandle` 这类 PHP 8.0+ 才存在的符号产生「未知类」误报。
 
 ---
 
@@ -105,19 +95,11 @@ find src tests -name '*.php' -print0 | xargs -0 -n1 php7.4 -l
 
 ### 5.1 准备独立仓库
 
-本包已从主项目拆分，**当前即为独立仓库**（包目录即仓库根）。
-以下为首次建仓时使用的命令，仅作参考：
+本包已从主项目拆分，**当前即为独立仓库**（包目录即仓库根）。首次建仓用的命令：
 
 ```bash
-# 1. 新建仓库（空仓库）
-git init packages/kingdee-k3cloud-sdk
-cd packages/kingdee-k3cloud-sdk
-
-# 2. 首次提交
-git add -A
+git init && git add -A
 git commit -m "feat: 金蝶云星空 WebAPI SDK 首个预览版"
-
-# 3. 关联远端
 git remote add origin git@github.com:trappistes/kingdee-k3cloud-sdk.git
 git push -u origin main
 ```
@@ -162,18 +144,15 @@ gh release create v1.0.0-beta.1 --title "v1.0.0-beta.1" --notes-file CHANGELOG.m
 
 1. 打开 https://packagist.org/packages/submit
 2. 提交仓库地址 `trappistes/kingdee-k3cloud-sdk`（GitHub 会弹出授权请求，需登录并授权）
-3. Packagist 会自动从 `composer.json` 读取版本 —— 因包内无 `version` 字段，
-   版本来自 **tag**；
-4. 确认包页面 https://packagist.org/packages/trappistes/kingdee-k3cloud-sdk
-   上出现 `v1.0.0-beta.1`。
+3. 确认包页面 https://packagist.org/packages/trappistes/kingdee-k3cloud-sdk
+   上出现 `v1.0.0-beta.1`
 
-若使用 GitHub Actions 自动同步（推荐，避免手动触发）：
-在 `.github/workflows/` 添加 `publish.yml`，使用
-`PackagistComposer/publish-github-action`，配置 `PACKAGIST_API_TOKEN` 与
-`PACKAGIST_USERNAME` 两个仓库 Secret。
+因包内无 `version` 字段，版本来自 **tag**。首次提交后抓取需数分钟，
+期间 `composer require` 报 `could not find a version matching` 属正常现象。
 
-> 首次提交后 Packagist 抓取需要数分钟，期间 `composer require` 会报
-> `could not find a version matching`。属正常现象，等待后重试即可。
+> 自动化方案：在 `.github/workflows/` 添加 `publish.yml`，使用
+> `PackagistComposer/publish-github-action`，配置 `PACKAGIST_API_TOKEN` 与
+> `PACKAGIST_USERNAME` 两个仓库 Secret。
 
 **私有 Composer 仓库（ satis / artifact）**
 
