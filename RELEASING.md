@@ -6,6 +6,29 @@
 
 ---
 
+## 0. 发布速查
+
+```bash
+# 1. 检查（本地）
+composer check                                    # 静态分析 + 测试
+git grep -nE "(password|appsecret)\s*=\s*['\"][^'\"]+" -- src tests   # 应无输出
+
+# 2. 确认 CI 全绿（§4.2 的 6 个 Job）
+
+# 3. 打 tag —— 提交必须确定，Packagist 收录后引用即固定（见 §5.2）
+git tag -a v1.0.0-beta.N -m "1.0.0-beta.N"
+git push origin v1.0.0-beta.N
+
+# 4. 建 Release
+gh release create v1.0.0-beta.N --title "v1.0.0-beta.N" --prerelease --notes-file CHANGELOG.md
+
+# 5. 提交 Packagist 收录（首次）或等待其自动同步（§5.3）
+```
+
+发布前请逐项确认 [§2.1 检查清单](#21-必须完成阻断发布)。
+
+---
+
 ## 1. 发布形态
 
 | 形态 | 适用场景 | 消费方安装方式 |
@@ -200,30 +223,21 @@ composer update trappistes/kingdee-k3cloud-sdk --prefer-dist
 
 ```bash
 composer require trappistes/kingdee-k3cloud-sdk:^1.0@beta
-composer show trappistes/kingdee-k3cloud-sdk   # 确认版本为 1.0.0-beta.1
+composer show trappistes/kingdee-k3cloud-sdk   # 确认版本号为本次发布的版本
 php -r 'require "vendor/autoload.php"; var_dump(class_exists(\Trappistes\Kingdee\K3Cloud\Client::class));'
+```
+
+若包尚未被 Packagist 收录，可用 VCS 仓库先行验证：
+
+```json
+{ "repositories": [{ "type": "vcs", "url": "git@github.com:trappistes/kingdee-k3cloud-sdk.git" }] }
 ```
 
 ---
 
 ## 6. 主项目切换（消费方视角）
 
-主项目当前通过 **path 仓库**引用本地包（开发期）：
-
-```json
-{
-    "repositories": [
-        {
-            "type": "path",
-            "url": "packages/kingdee-k3cloud-sdk",
-            "options": { "versions": { "trappistes/kingdee-k3cloud-sdk": "1.0.0-beta.1" } }
-        }
-    ],
-    "require": { "trappistes/kingdee-k3cloud-sdk": "^1.0@beta" }
-}
-```
-
-切换到已发布的仓库时：
+主项目（若已从 path 仓库切换为本包）：
 
 ```json
 {
@@ -244,9 +258,9 @@ rm -rf vendor/trappistes && composer update trappistes/kingdee-k3cloud-sdk --pre
 
 | 场景 | 操作 |
 |---|---|
-| 消费方回退到上一个 tag | `composer require trappistes/kingdee-k3cloud-sdk:1.0.0-beta.0`（若该版本存在） |
-| 撤回已发布版本 | 删除远端 tag（`git push origin :refs/tags/vX.Y.Z`），Packagist 需手动清除该版本 |
-| 发布后发现缺陷 | 补丁版本 `1.0.0-beta.2`（beta 期间不做 immutable 版本） |
+| 消费方回退到上一个 tag | `composer require trappistes/kingdee-k3cloud-sdk:<上一个版本号>` |
+| 撤回已发布版本 | 删除远端 tag（`git push origin :refs/tags/vX.Y.Z`），**并到 Packagist 手动删除该版本** —— 仅删 tag 不会清除其索引 |
+| 发布后发现缺陷 | 发补丁版本（如 `1.0.0-beta.2`），不可移动已有 tag（见 §5.2） |
 
 > 因 beta 阶段 API 已冻结，**不兼容变更必须走新主版本**（如 `2.0.0-beta.1`），
 > 不可在同一主版本内删除或改变公开方法签名。
@@ -269,4 +283,5 @@ rm -rf vendor/trappistes && composer update trappistes/kingdee-k3cloud-sdk --pre
 
 签名认证实现派生自 MIT 许可的 [`kingdee-php/k3cloud`](https://github.com/kingdee-php/k3cloud)，
 其协议端点与报文结构亦与该实现等价。本包以 MIT 许可发布，
-详见 [LICENSE](LICENSE)、[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) 与 [README 的致谢章节](README.md)。
+完整署名见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)、
+[LICENSE](LICENSE) 与 [README 的致谢章节](README.md)。

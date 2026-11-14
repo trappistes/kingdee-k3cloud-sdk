@@ -6,31 +6,43 @@
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
 > 版本号由 git tag 定义，`composer.json` 不含 `version` 字段。
+> Packagist 会为每个版本固定其首次收录时的 tag 引用，故**本文档记录的是 git 层面的内容**，
+> 与 Packagist 上实际分发的产物可能存在差异（参见下文 `1.0.0-beta.2` 条目）。
 
 ---
 
 ## [1.0.0-beta.2] - 2026-11-14
 
-修正 beta.1 在 Packagist 上分发的是旧提交（首次提交）的问题。
+### 修正
 
-### 变更
+- **修复 beta.1 的分发缺陷**：beta.1 被 Packagist 首次收录时，其 tag 指向的是更早的提交，
+  导致 `composer require trappistes/kingdee-k3cloud-sdk:^1.0@beta` 实际安装到的是
+  缺少下述内容的旧版本。beta.2 为修正版。
 
-- `src/Http/CurlTransport.php`：
-  - 移除冗余的 `CURLOPT_COOKIEJAR => ''`（`CURLOPT_COOKIEFILE => ''` 已足以启用内存 Cookie 引擎）；
-  - 移除析构函数中冗余的 `isset()` 判断（构造失败时 PHP 不会调用析构函数，句柄必定已初始化）
-- 补充 `.github/workflows/sdk-tests.yml`、PHPStan 配置与 `THIRD-PARTY-NOTICES.md`
+  相较 beta.1 **实际分发的内容**，beta.2 新增：
 
-### 说明
+  - `src/Http/CurlTransport.php`
+    - 移除冗余的 `CURLOPT_COOKIEJAR => ''` —— `CURLOPT_COOKIEFILE => ''` 已足以启用内存 Cookie 引擎
+    - 移除析构函数中冗余的 `isset()` 判断 —— 构造失败时 PHP 不会调用析构函数，句柄必定已初始化
+  - `.github/workflows/sdk-tests.yml`：PHP 7.4 / 8.1 / 8.3 / 8.4 CI 矩阵 + 依赖下限验证 + PHPStan
+  - `phpstan.neon.dist`：PHPStan level 5（仅 `src/`）
+  - `THIRD-PARTY-NOTICES.md`：第三方署名声明
+  - `composer.json` 的 `test` / `analyze` / `check` scripts
+  - `tests/Integration/`：以本机回环地址验证 cURL 会话保持
 
-beta.1 的 tag 在 Packagist 收录后被移动过，而 Packagist 对已发布版本保留原始引用，
-不会因 tag 移动而重新解析，因此 beta.1 在 Packagist 上仍指向旧提交。
-**公开 API 未做任何变更**，beta.1 与 beta.2 的差异仅限上述实现细节与工程化文件。
+### 兼容性
+
+- **公开 API 无任何变更**，beta.1 → beta.2 无需修改调用代码
+- PHP `^7.4 || ^8.0`，无框架依赖
+
+> **升级建议**：使用 `^1.0@beta` 约束的消费方直接 `composer update` 即可获得 beta.2；
+> 若显式锁定了 `1.0.0-beta.1`，需改为 `1.0.0-beta.2`。
 
 ---
 
 ## [1.0.0-beta.1] - 2026-11-14
 
-首个公开预览版，替代原 `kingdee-php/k3cloud`（MIT）。
+首个公开预览版。
 
 ### 新增
 
@@ -45,30 +57,11 @@ beta.1 的 tag 在 Packagist 收录后被移动过，而 Packagist 对已发布�
 - **可观测性**：PSR-3 日志接入、密码 / 密钥 / 附件二进制脱敏
 - **扩展点**：`Transport` 接口可替换 HTTP 客户端，`request()` 作为任意端点逃生口
 
-### 工程化
-
-- **CI 矩阵**：PHP 7.4 / 8.1 / 8.3 / 8.4 全量测试 + 语法检查，
-  另含 `--prefer-lowest` 依赖下限验证与 PHPStan 静态分析（见 `.github/workflows/sdk-tests.yml`）
-- **静态分析**：PHPStan level 5（仅 `src/`），随 CI 持续回归
-- **一键检查**：`composer check` 依次执行静态分析与测试，本地与 CI 共用同一串命令
-- **集成测试**：新增 `tests/Integration/`，以本机回环地址与临时启动的内置服务器
-  验证 cURL 会话保持与内存 Cookie 引擎（不发起外网请求）
-- **不引入代码风格工具**：基础包保持框架无关，风格一致性由 Code Review 保证
-
 ### 兼容性
 
-- PHP `^7.4 || ^8.0`（CI 矩阵 7.4 / 8.1 / 8.3 / 8.4 持续验证）
+- PHP `^7.4 || ^8.0`
 - 扩展 `curl` / `json` / `mbstring`；依赖 `psr/log ^1.1 || ^2.0 || ^3.0`
 - 无框架依赖，可用于任意 PHP 项目
-
-### 与旧实现的差异
-
-| 旧实现 | 本 SDK |
-|---|---|
-| 数组式查询参数 | `Query` 对象，条件组合集中可校验 |
-| 静默 `die` / 吞异常 | 异常分层：认证 / 业务 / 传输 / 配置 |
-| 重试策略混杂 | 读可重试、写不重试 |
-| 分页需自行处理 | `queryAll()` 自动翻页 |
 
 ### 已知限制
 
@@ -80,7 +73,8 @@ beta.1 的 tag 在 Packagist 收录后被移动过，而 Packagist 对已发布�
 
 - 公开 API 自本版起冻结，beta 期间仅做向后兼容补充
 - 写操作不自动重试：网络超时后服务端是否已执行未知，须由调用方按业务单号幂等对账
-- 本包以 MIT 许可发布；签名实现派生自 MIT 许可的 `kingdee-php/k3cloud`，致谢见 README 与 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
+- 本包以 MIT 许可发布，替代 `kingdee-php/k3cloud`（同为 MIT）；
+  签名实现派生自后者，署名见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
 
 ---
 
