@@ -84,9 +84,11 @@ final class CurlTransport implements Transport
             CURLOPT_ENCODING => '',
             CURLOPT_TIMEOUT => (int) ($options['timeout'] ?? $this->timeout),
             CURLOPT_CONNECTTIMEOUT => (int) ($options['connect_timeout'] ?? $this->connectTimeout),
-            // 启用 cURL 内置 Cookie 引擎（内存模式）：自动收发并按作用域匹配
+            // 启用 cURL 内置 Cookie 引擎（内存模式）：自动收发并按作用域匹配。
+            // COOKIEFILE 传空串是官方文档支持的写法——启用 Cookie 引擎但不读写任何文件，
+            // 因此会话仅存在于内存中，不会在磁盘留下 cookie 文件。
+            // （无需再显式设置 COOKIEJAR：未指定文件名时 curl 同样不会写盘。）
             CURLOPT_COOKIEFILE => '',
-            CURLOPT_COOKIEJAR => '',
         ]);
 
         $responseBody = curl_exec($this->handle);

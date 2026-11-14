@@ -32,6 +32,8 @@
   另含 `--prefer-lowest` 依赖下限验证与 PHPStan 静态分析（见 `.github/workflows/sdk-tests.yml`）
 - **静态分析**：PHPStan level 5（仅 `src/`），随 CI 持续回归
 - **一键检查**：`composer check` 依次执行静态分析与测试，本地与 CI 共用同一串命令
+- **集成测试**：新增 `tests/Integration/`，以本机回环地址与临时启动的内置服务器
+  验证 cURL 会话保持与内存 Cookie 引擎（不发起外网请求）
 - **不引入代码风格工具**：基础包保持框架无关，风格一致性由 Code Review 保证
 
 ### 兼容性
