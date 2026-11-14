@@ -1,0 +1,9 @@
+# Composer 依赖（独立安装时产生）
+/vendor/
+
+# 库不应提交 lock 文件（会约束消费方）
+composer.lock
+
+# PHPUnit 缓存
+.phpunit.cache/
+.phpunit.result.cache

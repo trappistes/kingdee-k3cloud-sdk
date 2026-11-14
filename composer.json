@@ -1,0 +1,46 @@
+{
+    "name": "trappistes/kingdee-k3cloud-sdk",
+    "description": "金蝶云星空（Kingdee K3 Cloud）开放平台 WebAPI 客户端 SDK",
+    "type": "library",
+    "keywords": [
+        "kingdee",
+        "k3cloud",
+        "云星空",
+        "erp",
+        "sdk",
+        "api",
+        "webapi",
+        "beta"
+    ],
+    "license": "MIT",
+    "require": {
+        "php": "^7.4 || ^8.0",
+        "ext-curl": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "psr/log": "^1.1 || ^2.0 || ^3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.6 || ^10.5 || ^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Trappistes\\Kingdee\\K3Cloud\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Trappistes\\Kingdee\\K3Cloud\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "support": {
+        "source": "https://github.com/trappistes/kingdee-k3cloud-sdk",
+        "issues": "https://github.com/trappistes/kingdee-k3cloud-sdk/issues"
+    },
+    "homepage": "https://github.com/trappistes/kingdee-k3cloud-sdk"
+}
