@@ -1,5 +1,7 @@
 # trappistes/kingdee-k3cloud-sdk
 
+[![SDK Tests](https://github.com/trappistes/kingdee-k3cloud-sdk/actions/workflows/sdk-tests.yml/badge.svg)](https://github.com/trappistes/kingdee-k3cloud-sdk/actions/workflows/sdk-tests.yml)
+
 金蝶**云星空**（Kingdee K3 Cloud）开放平台 WebAPI 客户端 SDK。
 
 框架无关：不依赖 Laravel / Symfony / PSR 容器，配置由调用方显式注入，日志遵循 PSR-3。
@@ -481,28 +483,6 @@ $client = new Client($config, logger: $logger);
 
 ---
 
-## 从 kingdee-php/k3cloud 迁移
-
-| 原 SDK | 本包 |
-|---|---|
-| `K3CloudApiSdk` / `K3CloudClient` | `Trappistes\Kingdee\K3Cloud\Client` |
-| `new K3CloudClient($config)` | `new Client(Config::fromArray($config))` |
-| `$client->billQuery($params)`（数组） | `$client->query(Query::make(...))`（对象，条件更清晰） |
-| `$client->getFields($params)` | `$client->metadata($params)` |
-| `$client->uploadAttach($data)` | `$client->uploadAttachment($data)` |
-| `$client->save/delete/unAudit($formId, $data)` | 签名不变 |
-| `AuthService` 签名模式（`auth_type=3`） | `Config::AUTH_SIGNATURE`，**无需再继承 vendor 基类** |
-| 自己处理超时 / 重试 / 会话 | SDK 内置 |
-
-迁移注意：
-
-1. **查询参数从数组改为 `Query` 对象** —— 旧代码里手写的 `FilterString` 建议改用
-   `whereEquals()` / `whereIn()` / `whereOrg()`，避免拼接出错；
-2. **写操作不再自动重试** —— 旧实现若依赖重试容错，请改为幂等对账；
-3. 旧 vendor 的 `print_r + die` 静默失败已消除，异常会正常抛出。
-
----
-
 ## 常见问题
 
 **Q：返回 `金蝶登录失败：没有指定数据中心。`**
@@ -530,6 +510,17 @@ A：SDK 不做环境隔离（它只关心「怎么连」）。请在应用侧实
 - 发布流程与发布前检查清单：[RELEASING.md](RELEASING.md)
 - 变更记录：[CHANGELOG.md](CHANGELOG.md)
 - 签名认证实现派生自 MIT 许可的 [`kingdee-php/k3cloud`](https://github.com/kingdee-php/k3cloud)，致谢见文末
+
+### 安装来源
+
+```bash
+# Packagist（推荐）
+composer require trappistes/kingdee-k3cloud-sdk:^1.0@beta
+
+# 直接引用 Git 仓库（未发布 tag 时）
+# 在消费方 composer.json 中加入：
+#   "repositories": [{"type": "vcs", "url": "git@github.com:trappistes/kingdee-k3cloud-sdk.git"}]
+```
 
 ---
 
@@ -573,10 +564,16 @@ A：SDK 不做环境隔离（它只关心「怎么连」）。请在应用侧实
 ## 测试
 
 ```bash
-vendor/bin/phpunit -c packages/kingdee-k3cloud-sdk/phpunit.xml
+composer install          # 安装依赖（库不提交 composer.lock）
+composer test            # PHPUnit
+composer analyze         # PHPStan 静态分析（level 5，仅 src/）
+composer check           # 静态分析 + 测试（与 CI 同一串命令）
 ```
 
 单元测试使用内存假传输（`tests/Support/FakeTransport.php`），不发起真实网络请求。
+
+CI 矩阵覆盖 PHP 7.4 / 8.1 / 8.3 / 8.4，另含 `--prefer-lowest` 依赖下限验证，
+详见 [`.github/workflows/sdk-tests.yml`](.github/workflows/sdk-tests.yml)。
 
 ---
 

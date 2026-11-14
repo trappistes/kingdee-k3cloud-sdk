@@ -21,6 +21,7 @@
         "psr/log": "^1.1 || ^2.0 || ^3.0"
     },
     "require-dev": {
+        "phpstan/phpstan": "^2.2",
         "phpunit/phpunit": "^9.6 || ^10.5 || ^11.0"
     },
     "autoload": {
@@ -32,6 +33,19 @@
         "psr-4": {
             "Trappistes\\Kingdee\\K3Cloud\\Tests\\": "tests/"
         }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "analyze": "phpstan analyse --no-progress",
+        "check": [
+            "@analyze",
+            "@test"
+        ]
+    },
+    "scripts-descriptions": {
+        "test": "运行 PHPUnit 测试套件",
+        "analyze": "运行 PHPStan 静态分析（level 5，仅 src/）",
+        "check": "依次执行静态分析与测试（CI 与本地共用）"
     },
     "config": {
         "sort-packages": true

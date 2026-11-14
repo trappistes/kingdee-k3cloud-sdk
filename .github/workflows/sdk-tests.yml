@@ -1,0 +1,93 @@
+name: SDK Tests
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+# 同一分支的多次推送只保留最新一次运行
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 测试矩阵：兑现 composer.json 中 "php": "^7.4 || ^8.0" 的兼容性承诺
+  tests:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.1', '8.3', '8.4']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: curl, json, mbstring
+          coverage: none
+          tools: composer:v2
+
+      # 库不提交 composer.lock（会约束消费方），因此每次按最新可用版本解析
+      - name: 安装依赖
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      - name: 校验 composer.json
+        run: composer validate --no-check-publish --strict
+
+      # 显式全量语法检查：phpunit 只加载被测试覆盖的文件，
+      # 此步骤保证 src/ 下每个文件在目标版本上均可解析
+      - name: 语法检查
+        run: find src tests -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: 运行测试
+        run: composer test
+
+  # 依赖下限验证：使用最低可用版本依赖，防止 composer.json 的约束被误改而破坏消费方
+  lowest-deps:
+    name: Prefer-lowest (PHP 8.1)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 PHP 8.1
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: curl, json, mbstring
+          coverage: none
+          tools: composer:v2
+
+      - name: 安装最低版本依赖
+        run: composer update --prefer-lowest --prefer-stable --no-interaction --no-progress
+
+      - name: 运行测试
+        run: composer test
+
+  # 静态分析：单独使用 PHP 8.4 运行，避免 PHP 7.4 环境下的工具链兼容问题
+  analyze:
+    name: PHPStan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: curl, json, mbstring
+          coverage: none
+          tools: composer:v2
+
+      - name: 安装依赖
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      - name: 静态分析
+        run: composer analyze

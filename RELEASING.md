@@ -24,17 +24,19 @@
 
 | # | 检查项 | 校验方式 |
 |---|---|---|
-| 1 | `composer.json` 的 `homepage` / `support.source` / `support.issues` 为**真实仓库地址** | 人工确认（当前为占位地址，发布前必须替换） |
-| 2 | `composer validate --no-check-publish` 通过 | `composer validate --no-check-publish` |
-| 3 | 全版本测试通过（PHP 7.4 / 8.1 / 8.3 / 8.4） | `composer test` 或见 §4 |
-| 4 | 源码在 PHP 7.4 下可解析（声明的最低版本是**被验证过的承诺**） | `find src tests -name '*.php' -print0 \| xargs -0 -n1 php -l`（在 7.4 上执行） |
-| 5 | 代码风格一致 | `vendor/bin/pint --test packages/kingdee-k3cloud-sdk/src packages/kingdee-k3cloud-sdk/tests` |
+| 1 | `composer.json` 的 `homepage` / `support.source` / `support.issues` 为**真实仓库地址** | 人工确认（当前为 `https://github.com/trappistes/kingdee-k3cloud-sdk`） |
+| 2 | `composer validate --no-check-publish --strict` 通过 | `composer validate --no-check-publish --strict` |
+| 3 | 全版本测试通过（PHP 7.4 / 8.1 / 8.3 / 8.4）+ 依赖下限 + 静态分析 | CI 全部 Job 变绿（见 §4.2），本地可跑 `composer check` |
+| 4 | 源码在 PHP 7.4 下可解析（声明的最低版本是**被验证过的承诺**） | `find src tests -name '*.php' -print0 \| xargs -0 -n1 php -l`（在 7.4 上执行），或由 CI 矩阵的语法检查步骤保证 |
+| 5 | 静态分析无告警 | `composer analyze`（PHPStan level 5，仅 `src/`） |
 | 6 | 无敏感信息入库 | `git grep -nE "(password|appsecret)\s*=\s*['\"][^'\"]+" -- src tests` 无命中 |
 | 7 | LICENSE / CHANGELOG / README 齐备且版本号一致 | 人工确认 |
 | 8 | `CHANGELOG.md` 顶部版本号与 tag 一致 | 人工确认 |
 
 ### 2.2 建议完成
 
+- [ ] 代码风格一致（人工 Review）—— 基础包**不引入**代码风格工具：
+      Pint 属 Laravel 生态，与上游 `kingdee-php/k3cloud` 的风格无关，强行引入只会产生无关 diff
 - [ ] 至少 1 位非作者维护者完成 Code Review
 - [ ] 在**测试帐套**完成一次端到端冒烟（见 §5）
 - [ ] README 中的示例代码与当前公开 API 一致（公开 API 变更后必须复核）
@@ -58,24 +60,53 @@
 
 ## 4. 测试矩阵
 
+> 本仓库为**独立仓库**（包目录即仓库根），CI 工作流位于仓库根目录的
+> `.github/workflows/sdk-tests.yml`，**不包含** `defaults.run.working-directory`。
+
+### 4.1 本地验证
+
 ```bash
-# 包内独立安装（不依赖主项目）
-cd packages/kingdee-k3cloud-sdk
+# 安装依赖（库不提交 composer.lock，每次按最新可用版本解析）
 composer update --prefer-dist --no-interaction
 
-# 各 PHP 版本分别执行（PHP 7.4 必须单独验证）
-php vendor/bin/phpunit -c phpunit.xml
+# 全量检查：静态分析 + 测试（与 CI 同一串命令）
+composer check
+
+# 单项
+composer analyze   # PHPStan level 5
+composer test      # PHPUnit
 ```
 
-CI 工作流：`.github/workflows/sdk-tests.yml`（矩阵 7.4 / 8.1 / 8.3 / 8.4）。
-作为独立仓库发布时，把该文件放到**仓库根目录**的 `.github/workflows/`，
-并删除 `defaults.run.working-directory`（包目录即仓库根）。
+### 4.2 CI 矩阵
+
+| Job | 版本 | 内容 |
+|---|---|---|
+| `tests` | 7.4 / 8.1 / 8.3 / 8.4 | `composer validate` → 全量语法检查 → `composer test` |
+| `lowest-deps` | 8.1 | `--prefer-lowest` 验证依赖下限约束未误改 |
+| `analyze` | 8.4 | `composer analyze`（独立 job，避免 7.4 工具链兼容问题） |
+
+**PHP 7.4 的兼容性由真实执行保证**（矩阵中实际跑完测试套件），而非静态分析推断——
+这比固定 `phpVersion` 的做法更可靠：后者会让 `\CurlHandle` 这类
+PHP 8.0+ 才存在的符号产生「未知类」误报。
+
+### 4.3 手动多版本验证
+
+```bash
+# 各 PHP 版本分别执行（PHP 7.4 必须单独验证）
+php vendor/bin/phpunit -c phpunit.xml
+
+# PHP 7.4 全量语法检查
+find src tests -name '*.php' -print0 | xargs -0 -n1 php7.4 -l
+```
 
 ---
 
 ## 5. 发布流程
 
 ### 5.1 准备独立仓库
+
+本包已从主项目拆分，**当前即为独立仓库**（包目录即仓库根）。
+以下为首次建仓时使用的命令，仅作参考：
 
 ```bash
 # 1. 新建仓库（空仓库）
@@ -91,27 +122,58 @@ git remote add origin git@github.com:trappistes/kingdee-k3cloud-sdk.git
 git push -u origin main
 ```
 
-> 注意：包目录当前已位于主项目仓库的 `packages/` 下，
-> 需要用 `git filter-repo` / `git subtree split` 拆分历史，
-> 或直接以一次初始提交重新建仓（推荐，beta 阶段无历史负担）。
+> 若包目录仍位于主项目的 `packages/` 下，需要用 `git filter-repo` /
+> `git subtree split` 拆分历史，或直接以一次初始提交重新建仓
+> （推荐，beta 阶段无历史负担）。
 
 ### 5.2 打 tag
 
+**前置条件：§4.2 的 CI 全部 Job 变绿。** tag 一旦推送即视为对外发布，不可撤回。
+
 ```bash
+# 1. 确认工作区干净且已同步
+git status
+git pull --ff-only
+
+# 2. 打 tag（message 与版本号一致）
 git tag -a v1.0.0-beta.1 -m "1.0.0-beta.1"
+
+# 3. 推送 tag
 git push origin v1.0.0-beta.1
 ```
 
 Tag 必须是 `v` 前缀（Composer 识别 `v1.0.0` 与 `1.0.0` 等价，`v` 前缀更通用）。
 
+> 注意：`git push origin v1.0.0-beta.1` 偶发 `src refspec does not match any`
+> （本地 tag 与远端 ref 解析不一致），改用 `git push origin --tags` 可正常推送。
+
+创建 GitHub Release（可选，但便于展示 CHANGELOG）：
+
+```bash
+gh release create v1.0.0-beta.1 --title "v1.0.0-beta.1" --notes-file CHANGELOG.md
+```
+
 ### 5.3 发布到 Composer 仓库
 
-**Packagist（公共）**
+**Packagist（公共）—— 必做**
 
-1. 在 Packagist 提交仓库地址并关联；
-2. Packagist 会自动从 `composer.json` 读取版本 —— 因包内无 `version` 字段，
+仓库创建后**必须**在 Packagist 提交仓库地址，否则消费方无法通过
+`composer require` 安装（GitHub 上的 Release 不等于 Composer 上的发布）。
+
+1. 打开 https://packagist.org/packages/submit
+2. 提交仓库地址 `trappistes/kingdee-k3cloud-sdk`（GitHub 会弹出授权请求，需登录并授权）
+3. Packagist 会自动从 `composer.json` 读取版本 —— 因包内无 `version` 字段，
    版本来自 **tag**；
-3. 确认包页面上出现 `1.0.0-beta.1`。
+4. 确认包页面 https://packagist.org/packages/trappistes/kingdee-k3cloud-sdk
+   上出现 `v1.0.0-beta.1`。
+
+若使用 GitHub Actions 自动同步（推荐，避免手动触发）：
+在 `.github/workflows/` 添加 `publish.yml`，使用
+`PackagistComposer/publish-github-action`，配置 `PACKAGIST_API_TOKEN` 与
+`PACKAGIST_USERNAME` 两个仓库 Secret。
+
+> 首次提交后 Packagist 抓取需要数分钟，期间 `composer require` 会报
+> `could not find a version matching`。属正常现象，等待后重试即可。
 
 **私有 Composer 仓库（ satis / artifact）**
 
@@ -192,8 +254,8 @@ rm -rf vendor/trappistes && composer update trappistes/kingdee-k3cloud-sdk --pre
 
 | 场景 | 操作 |
 |---|---|
-| 消费方回退到上一个 tag | `composer require trappistes/kingdee-k3cloud-sdk:1.0.0-beta.0` |
-| 撤回已发布版本 | 删除远端 tag（Packagist 需手动清除该版本） |
+| 消费方回退到上一个 tag | `composer require trappistes/kingdee-k3cloud-sdk:1.0.0-beta.0`（若该版本存在） |
+| 撤回已发布版本 | 删除远端 tag（`git push origin :refs/tags/vX.Y.Z`），Packagist 需手动清除该版本 |
 | 发布后发现缺陷 | 补丁版本 `1.0.0-beta.2`（beta 期间不做 immutable 版本） |
 
 > 因 beta 阶段 API 已冻结，**不兼容变更必须走新主版本**（如 `2.0.0-beta.1`），

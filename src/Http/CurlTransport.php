@@ -19,6 +19,8 @@ final class CurlTransport implements Transport
     /**
      * cURL 句柄
      *
+     * PHP 8.0 起 `curl_init()` 返回 `CurlHandle` 对象，7.4 及以下返回 `resource`。
+     *
      * @var resource|\CurlHandle
      */
     private $handle;
@@ -43,9 +45,8 @@ final class CurlTransport implements Transport
 
     public function __destruct()
     {
-        if (isset($this->handle)) {
-            curl_close($this->handle);
-        }
+        // 构造失败时 PHP 不会调用析构函数，因此句柄必定已初始化，无需判空
+        curl_close($this->handle);
     }
 
     /**

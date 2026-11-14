@@ -1,0 +1,11 @@
+parameters:
+    level: 5
+    paths:
+        - src
+    # 只分析 src/：tests/ 属于消费侧验证代码，不是库的对外契约
+    #
+    # 不固定 phpVersion：包同时支持 PHP 7.4 与 8.x，而 `\CurlHandle` 等符号
+    # 仅在 PHP 8.0+ 存在，固定为 7.4 会产生「未知类」误报。
+    # PHP 7.4 的兼容性由 CI 矩阵中的真实执行保证（见 .github/workflows/sdk-tests.yml），
+    # 比静态分析推断更可靠。
+    treatPhpDocTypesAsCertain: false

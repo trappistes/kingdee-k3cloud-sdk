@@ -7,3 +7,12 @@ composer.lock
 # PHPUnit 缓存
 .phpunit.cache/
 .phpunit.result.cache
+
+# PHPStan 缓存
+.phpstan.cache/
+
+# 编辑器与操作系统
+.DS_Store
+.idea/
+.vscode/
+*.swp
