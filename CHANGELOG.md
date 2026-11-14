@@ -9,6 +9,25 @@
 
 ---
 
+## [1.0.0-beta.2] - 2026-11-14
+
+修正 beta.1 在 Packagist 上分发的是旧提交（首次提交）的问题。
+
+### 变更
+
+- `src/Http/CurlTransport.php`：
+  - 移除冗余的 `CURLOPT_COOKIEJAR => ''`（`CURLOPT_COOKIEFILE => ''` 已足以启用内存 Cookie 引擎）；
+  - 移除析构函数中冗余的 `isset()` 判断（构造失败时 PHP 不会调用析构函数，句柄必定已初始化）
+- 补充 `.github/workflows/sdk-tests.yml`、PHPStan 配置与 `THIRD-PARTY-NOTICES.md`
+
+### 说明
+
+beta.1 的 tag 在 Packagist 收录后被移动过，而 Packagist 对已发布版本保留原始引用，
+不会因 tag 移动而重新解析，因此 beta.1 在 Packagist 上仍指向旧提交。
+**公开 API 未做任何变更**，beta.1 与 beta.2 的差异仅限上述实现细节与工程化文件。
+
+---
+
 ## [1.0.0-beta.1] - 2026-11-14
 
 首个公开预览版，替代原 `kingdee-php/k3cloud`（MIT）。

@@ -112,6 +112,12 @@ git push -u origin main
 
 **前置条件：§4.2 的 CI 全部 Job 变绿。** tag 一旦推送即视为对外发布，不可撤回。
 
+> ⚠️ **发布前务必确定 tag 指向的提交无误。** Packagist 收录后，
+> 该版本的 `source.reference` 即被固定；之后即使强制移动 tag，
+> Packagist **不会**重新解析，已收录的版本会永久指向旧提交。
+> 若发现打错了 tag，只能发补丁版本（如 `1.0.0-beta.2`）修正，
+> 而不能靠移动 tag 收回。
+
 ```bash
 # 1. 确认工作区干净且已同步
 git status
@@ -149,6 +155,11 @@ gh release create v1.0.0-beta.1 --title "v1.0.0-beta.1" --notes-file CHANGELOG.m
 
 因包内无 `version` 字段，版本来自 **tag**。首次提交后抓取需数分钟，
 期间 `composer require` 报 `could not find a version matching` 属正常现象。
+
+> **校验索引是否正确**：Packagist 收录后会固定该版本的 `source.reference`。
+> 可用 `curl -s https://repo.packagist.org/p2/<vendor>/<name>.json` 查看
+> 其中的 `source.reference` 是否等于 tag 指向的提交，不等则说明索引陈旧，
+> 需发补丁版本修正（见 §5.2）。
 
 > 自动化方案：在 `.github/workflows/` 添加 `publish.yml`，使用
 > `PackagistComposer/publish-github-action`，配置 `PACKAGIST_API_TOKEN` 与
