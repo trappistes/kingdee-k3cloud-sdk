@@ -13,8 +13,51 @@
 
 ## [未发布]
 
+## [1.0.0-beta.3] - 2026-11-27
+
 ### 修正
 
+- **接口地址拼接不再依赖末尾斜杠**：`host_url` 末尾有没有 `/` 都能正常拼接，
+  原实现手改 `hostUrl` 时忘了补 `/` 会直接拼出错误地址。
+- **配置属性名拼写错误不再被静默忽略**：`Config` 新增 `__set()` 拦截不存在的属性名，
+  写入 `$config->appid`（真实属性为 `appId`）这类拼写错误会直接抛 `InvalidArgumentException`。
+  原实现会创建动态属性，SDK 读取的仍是旧属性，导致「已切换账套」的假象、旧会话继续被使用。
+- **身份切换失败不再留下半更新状态**：身份指纹改为**切换成功后才提交**。
+  原实现先提交指纹再切换，新凭据登录失败或签名配置非法时，客户端会永久停留在
+  「新指纹 + 旧签名器」的状态，后续请求不再尝试切换。
+  现在切换失败时直接抛异常且**不发送业务请求**，修正配置后下一次请求会重新尝试切换。
+- **手动登录与身份切换不再互相打架**：`login()` 在凭据已变时会先丢弃旧会话，
+  登录成功后同步身份指纹；原实现手动登录后，下一次请求会再次判定「身份已变」而重复登录，
+  把刚建好的会话又作废掉。
+- **实例指纹消除分隔符碰撞**：`Config::fingerprint()` 改用长度前缀拼接，
+  原实现用 `|` 拼接，`acct_id='x|y'` + `username='z'` 与 `acct_id='x'` + `username='y|z'`
+  会得到相同指纹；指纹值本身因此变化（该值仅作不透明标识使用）。
+  非标量的密钥字段（如 `password` 被赋成数组）现在抛 `InvalidArgumentException`，
+  原实现会静默算出错误指纹。
+- **配置变更区分身份与行为**：身份字段（`auth_type` / `host_url` / `acct_id` / `username` /
+  `password` / `appid` / `appsecret` / `org_num` / `lcid`）变更时，SDK 会丢弃旧会话（Cookie）
+  并用新凭据重新登录后再发请求；行为字段（`timeout` / `connect_timeout` / `max_attempts`）
+  变更立即生效，不触发重新登录。
+  原实现改了凭据后旧会话仍被沿用，常驻进程复用同一客户端切账套时可能写错账套。
+- **写端点与策略双向校验**：写端点传入可重试策略报错（已有）；反之，写策略用于未登记的端点也会报错，
+  新增写端点时若忘记登记到 `Endpoints::WRITE_ENDPOINTS`，会立即失败而不会被当成读端点重试。
+- **策略超时不得为非正数**：`Policy::read/write/attachment()` 拒绝 `timeout < 1`，
+  原实现允许 `Policy::read(0)`，而 cURL 的 `CURLOPT_TIMEOUT=0` 表示永不超时。
+- **实例指纹纳入组织维度**：`Config::fingerprint()` 现在包含 `org_num`，
+  原实现把不同组织的签名认证客户端视为同一实例。
+- **写端点的重试策略在 SDK 内固化**：新增 `Endpoints::WRITE_ENDPOINTS` 写端点清单，
+  `Client::request()` 对写端点拒绝可重试策略（传入 `Policy::read()` 抛 `InvalidArgumentException`），
+  未显式指定策略时按端点性质推导（写=不重试，读=可重试）。
+  原实现完全依赖调用方自律，写端点可被误配为读策略而静默重试。
+- **签名认证的应用 ID 格式在本地校验**：`Signer` 构造时要求 `appid` 为 `clientId_secret` 形式、
+  `appsecret` 非空，否则抛 `ConfigurationException`。
+  原实现 appid 缺 `_` 时会静默用空密钥签名，只表现为服务端拒绝，难以定位。
+- **应用密钥登录的用户名可选**：`username` 为空时登录载荷不再下发该字段，
+  避免服务端把空串当作非法用户名；填写时行为不变。
+- **`Query::fromArray()` 不再拆解过滤表达式**：`FilterString` 原样保留为单个条件，
+  原实现按 ` and ` 拆分会切坏值中含该文本的条件；现在 `fromArray(toArray())` 可逆。
+- **每次请求前重新校验配置**：`Config` 是活对象，修改后可能被改坏；
+  SDK 现在在每次请求前调用 `assertValid()`，不合法直接抛 `InvalidArgumentException`。
 - **多值集合条件的写法**：`whereIn()` 改为逐值加引号（`FNumber in('101','102')`），
   原写法把多个值塞进一个字面量（`in('101,102')`），在金蝶按字面量解析时会静默返回空集。
   `whereOrg()` 随之修正。
@@ -51,6 +94,16 @@
 ### 兼容性
 
 - **属于行为变更**（当前仍是 `1.0.0-beta` 阶段，未进入稳定版）：
+  - 身份字段（凭据/账套/认证方式）变更后，下次请求会先重新登录（旧会话作废）；
+  - 写端点传入可重试策略现在抛 `InvalidArgumentException`（原实现静默接受并重试）；
+  - 写策略用于未登记端点同样抛 `InvalidArgumentException`；
+  - `Policy::read/write/attachment()` 拒绝非正数超时；
+  - `Config::fingerprint()` 现在包含 `org_num`；
+  - `request()` 不传策略时，写端点默认不重试（原默认为读策略、会重试）；
+  - 签名认证的 `appid` 格式不合法时构造即报错（原为运行期才失败）；
+  - 应用密钥登录在 `username` 为空时不再下发该字段；
+  - `Query::fromArray()` 的 `FilterString` 不再按 ` and ` 拆分；
+  - 配置在每次请求前被重新校验，非法配置会提前抛异常；
   - `whereIn()` / `whereOrg()` 生成的 `FilterString` 文本格式变化（逐值加引号）；
   - 值中的单引号由「直接拼接」改为「翻倍转义」；
   - `{}` 响应从「空结果」变为 `TransportException`；
@@ -58,13 +111,20 @@
   - 会话失效时写操作不再自动重发（抛 `AuthenticationException`）；
   - `4xx` 响应由「返回报文」变为 `TransportException`；
   - `timeout` / `connect_timeout` 必须大于 0；
-  - 请求体与响应体不再写入 `info` 级日志事件。
+  - 请求体与响应体不再写入 `info` 级日志事件；
+  - 写入不存在的配置属性（如 `$config->appid`）现在抛 `InvalidArgumentException`，
+    原实现会静默创建动态属性（拼写错误被掩盖，旧会话继续被当作当前身份使用）；
+  - `Config::fingerprint()` 的取值算法变化（长度前缀拼接，消除分隔符碰撞），
+    指纹值本身因此改变；该值仅作不透明标识使用；
+  - `login()` 在凭据已变时会先丢弃旧会话，登录成功后同步身份指纹；
+  - 身份切换失败（新凭据登录失败、签名配置非法）时不发送业务请求，
+    且身份指纹不提交（修正配置后下一次请求会重新尝试切换）。
 - 公开 API 签名无变更；`Query` / `Response` 的方法集合不变。
   `login()` / `relogin()` 仅新增可选参数（`?int $timeout`），旧调用方式不受影响。
 
 ### 验证
 
-- PHPUnit：104 tests / 301 assertions 全部通过（新增 8 条回归用例）；
+- PHPUnit：132 tests / 370 assertions 全部通过（新增 28 条回归用例）；
 - PHPStan level 5：0 错误；
 - 验证手段仅限单元测试与本机回环，**未连接任何真实金蝶服务器**；
 - **未做实机验证**：金蝶过滤表达式语法、签名算法、会话失效时业务是否已执行、

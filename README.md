@@ -10,9 +10,10 @@
 
 ---
 
-> ### ⚠️ v1.0.0-beta.2（预览版）
+> ### ⚠️ v1.0.0-beta.3（预览版）
 >
-> **公开 API 已冻结**（类、方法签名、配置键、异常体系），beta 期间只做向后兼容的补充。
+> **方法签名与配置键已冻结**（类、方法签名、配置键、异常体系），beta 期间只做向后兼容的补充；
+> 行为语义的修正会记在 CHANGELOG（beta 期间已发生若干行为变更，见下文兼容性说明）。
 >
 > 已知限制：
 > - **16 个写类端点尚未在真实 ERP 上验证**（save / audit / submit / push / delete 等）—— 仅有报文契约测试；
@@ -160,6 +161,11 @@ $client = new Client($config, new GuzzleTransport(new \GuzzleHttp\Client()));
 
 写操作超时后请由业务侧做**幂等对账**（例如按业务单号查询是否已存在），而不是依赖 SDK 重试。
 
+> **端点级固化**：写端点清单维护在 `Endpoints::WRITE_ENDPOINTS`。
+> `Client::request()` 对写端点拒绝可重试策略（传入 `Policy::read()` 会抛
+> `InvalidArgumentException`），未显式指定策略时按端点性质推导（写=不重试，读=可重试）。
+> 因此「写端点被误配为读策略」不再依赖调用方自觉。
+
 ### 2. 会话失效自动重登
 
 登录态过期时，金蝶返回业务错误而非 HTTP 错误。SDK 识别会话失效特征后：
@@ -260,6 +266,8 @@ Query::make('BD_MATERIAL')
 ```
 
 `copy()` 可派生不同条件的查询；`only()` 覆盖已有过滤条件；`fromArray()` 便于从旧式参数数组迁移。
+`fromArray()` 把 `FilterString` 原样保留为单个条件（不按 ` and ` 拆开，避免切坏含该文本的值），
+因此 `fromArray(toArray())` 可逆。
 
 > `QueryResult` 仅实现 `IteratorAggregate` / `Countable`；取行请用 `$result->rows`，不提供数组式访问。
 
@@ -308,16 +316,16 @@ Response::loginResultType($raw); // 1=登录成功
 
 ## 配置速查
 
-所有配置通过 `Config::fromArray()` 传入（键名亦支持 camelCase 别名）：
+`Config::fromArray()` 使用的键名如下（同时兼容 camelCase 别名）：
 
 | 键名 | 类型 | 默认 | 说明 |
 |---|---|---|---|
 | `auth_type` | int | `1` | `1` 账套+密码；`2` 第三方授权；`3` 开放平台签名 |
 | `host_url` | string | `''` | 金蝶接口地址，如 `https://k3cloud.example.com/k3cloud/` |
 | `acct_id` | string | `''` | 账套 ID |
-| `username` | string | `''` | 用户名（`auth_type=1/2/3` 均需） |
+| `username` | string | `''` | 用户名（`auth_type=1` 必填；`auth_type=2` 可选，为空时登录载荷不下发该字段；`auth_type=3` 参与签名 AppData） |
 | `password` | string | `''` | 密码（仅 `auth_type=1`） |
-| `appid` | string | `''` | 应用 ID（`auth_type=2/3`）；签名认证格式为 `clientId_secret` |
+| `appid` | string | `''` | 应用 ID（`auth_type=2/3`）；签名认证格式必须为 `clientId_secret`，否则构造时报错 |
 | `appsecret` | string | `''` | 应用密钥（`auth_type=2/3`） |
 | `lcid` | int | `2052` | 账套语系，2052 = 中文 |
 | `org_num` | int | `0` | 组织编号（签名认证的 AppData 组成项） |
@@ -326,6 +334,31 @@ Response::loginResultType($raw); // 1=登录成功
 | `max_attempts` | int | `3` | **读操作**最大尝试次数（含会话失效后的重发）；写操作恒为 1（不重试） |
 
 > 也可用 `Config::fromEnvironment()` 从环境变量读取，默认前缀 `KINGDEE_`。
+>
+> **两套名字不要混用**：上面的键名只用于 `Config::fromArray()`；
+> 直接改 `$client->config()` 上的属性时用的是 **PHP 属性名（驼峰）**：
+> `authType` `hostUrl` `acctId` `username` `password` `appId` `appSecret`
+> `lcid` `orgNum` `timeout` `connectTimeout` `maxAttempts`。
+> 写成不存在的属性名（如 `$config->appid`）会直接抛 `InvalidArgumentException`，
+> 避免拼写错误被静默忽略（旧会话继续被当成新身份使用）。
+>
+> **Config 是活对象**：`$client->config()` 返回的就是内部那个配置对象，修改它会影响后续请求。
+> 为避免改坏后静默发请求，SDK 在**每次请求前**重新校验配置（必填项、超时 > 0），
+> 不合法直接抛 `InvalidArgumentException`。需要固定配置时请自行克隆一份再传入。
+>
+> **改配置分两类**：
+>
+> | 类型 | 字段（PHP 属性名） | 改动的后果 |
+> |---|---|---|
+> | 身份 | `authType` `hostUrl` `acctId` `username` `password` `appId` `appSecret` `orgNum` `lcid` | **旧会话立即作废**，SDK 会用新凭据重新登录后再发请求 |
+> | 行为 | `timeout` `connectTimeout` `maxAttempts` | 立即生效，**不触发重新登录** |
+>
+> 身份变更后重新登录是刻意的：旧 Cookie 属于旧账号/旧账套，
+> 常驻进程复用同一个客户端切账套时继续用它会写错账套。
+>
+> 身份切换失败（如新密码错误、新 `appId` 不合法）时：
+> SDK **不会发送业务请求**，而是直接抛出异常；
+> 身份指纹也不会被提交，修正配置后下一次请求会重新尝试切换。
 
 ---
 
@@ -546,7 +579,7 @@ composer require trappistes/kingdee-k3cloud-sdk:^1.0@beta
 
 ## 版本策略
 
-- `1.0.0-beta.x`：**公开 API 已冻结**，仅做向后兼容的补充；
+- `1.0.0-beta.x`：**方法签名与配置键已冻结**，仅做向后兼容的补充（行为语义的修正会记在 CHANGELOG）；
 - `1.0.0`：正式版，移除 beta 标记；
 - 语义化版本：破坏性变更走主版本号，功能新增走次版本号，修复走修订号。
 
