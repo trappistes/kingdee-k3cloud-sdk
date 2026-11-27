@@ -114,11 +114,14 @@ trait HandlesQueries
     /**
      * 判断记录是否存在（通用存在性查询，供业务侧做幂等核对）
      *
+     * 存在性判断与分页无关：总是从第一页取第一行，
+     * 否则复用了 offset() 的查询会误判（第 N 页的第一行 ≠ 存在性）。
+     *
      * @param Query $query
      */
     public function exists($query): bool
     {
-        return $this->queryRows($this->assertQuery($query)->copy()->perPage(1)) !== [];
+        return $this->queryRows($this->assertQuery($query)->copy()->offset(0)->perPage(1)) !== [];
     }
 
     /**

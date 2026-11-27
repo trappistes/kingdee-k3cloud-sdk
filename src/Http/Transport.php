@@ -29,6 +29,10 @@ interface Transport
 
     /**
      * 重置会话（清除 Cookie，用于重新登录）
+     *
+     * 实现必须**真正丢弃**已有的会话凭据（Cookie 等）：
+     * 身份变更时 SDK 依赖它作废旧身份会话；
+     * 若自定义实现这里是空操作，切换账套时可能继续用旧账号发请求。
      */
     public function resetSession(): void;
 }

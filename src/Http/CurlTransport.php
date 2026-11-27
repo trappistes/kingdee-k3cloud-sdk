@@ -61,12 +61,32 @@ final class CurlTransport implements Transport
         }
 
         $headerLines = [];
+        $hasContentType = false;
+        $hasAccept = false;
+
         foreach ($headers as $name => $value) {
             $headerLines[] = $name.': '.$value;
+
+            $lower = strtolower($name);
+
+            if ($lower === 'content-type') {
+                $hasContentType = true;
+            }
+
+            if ($lower === 'accept') {
+                $hasAccept = true;
+            }
         }
 
-        $headerLines[] = 'Content-Type: application/json';
-        $headerLines[] = 'Accept: application/json';
+        // 默认头只在调用方未提供时补充，避免同一头发送两次
+        if (! $hasContentType) {
+            $headerLines[] = 'Content-Type: application/json';
+        }
+
+        if (! $hasAccept) {
+            $headerLines[] = 'Accept: application/json';
+        }
+
         $headerLines[] = 'User-Agent: Kingdee/Php WebApi SDK (compatible: K3Cloud 7.3+)';
 
         // 重置选项但保留连接缓存，实现连接复用

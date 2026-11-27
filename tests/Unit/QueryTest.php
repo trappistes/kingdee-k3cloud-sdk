@@ -15,6 +15,20 @@ use Trappistes\Kingdee\K3Cloud\Query;
  */
 final class QueryTest extends TestCase
 {
+    public function test_from_array_keeps_filter_string_intact(): void
+    {
+        $filter = "FName='a and b'";
+
+        $query = Query::fromArray([
+            'FormId' => 'BD_MATERIAL',
+            'FieldKeys' => 'FNumber,FName',
+            'FilterString' => $filter,
+        ]);
+
+        // 值中含 ' and ' 时不得被拆坏，且 toArray/fromArray 互逆
+        self::assertSame($filter, $query->toArray()['FilterString']);
+    }
+
     public function test_filters_are_combined_with_and(): void
     {
         $query = Query::make('BD_MATERIAL')->fields('FNumber')
@@ -34,7 +48,7 @@ final class QueryTest extends TestCase
             ->whereIn('FUseOrgId.FNumber', ['101', '102']);
 
         self::assertSame(
-            "FForbidStatus='A' and FUseOrgId.FNumber in('101,102')",
+            "FForbidStatus='A' and FUseOrgId.FNumber in('101','102')",
             $query->toArray()['FilterString'],
         );
     }
@@ -50,7 +64,39 @@ final class QueryTest extends TestCase
     {
         $query = Query::make('BD_MATERIAL')->fields('FNumber')->whereOrg(OrgFields::PURCHASE, ['101', '102']);
 
-        self::assertSame("FPurchaseOrgId.FNumber in('101,102')", $query->toArray()['FilterString']);
+        self::assertSame("FPurchaseOrgId.FNumber in('101','102')", $query->toArray()['FilterString']);
+    }
+
+    public function test_where_in_quotes_every_value_separately(): void
+    {
+        $query = Query::make('BD_MATERIAL')->fields('FNumber')
+            ->whereIn('FNumber', ['A001', 'B002', 'C003']);
+
+        self::assertSame("FNumber in('A001','B002','C003')", $query->toArray()['FilterString']);
+    }
+
+    public function test_where_equals_escapes_single_quote_in_value(): void
+    {
+        $query = Query::make('BD_MATERIAL')->fields('FNumber')
+            ->whereEquals('FName', "O'Brien");
+
+        self::assertSame("FName='O''Brien'", $query->toArray()['FilterString']);
+    }
+
+    public function test_where_in_escapes_single_quote_in_value(): void
+    {
+        $query = Query::make('BD_MATERIAL')->fields('FNumber')
+            ->whereIn('FName', ["O'Brien"]);
+
+        self::assertSame("FName in('O''Brien')", $query->toArray()['FilterString']);
+    }
+
+    public function test_where_in_keeps_comma_inside_value(): void
+    {
+        $query = Query::make('BD_MATERIAL')->fields('FNumber')
+            ->whereIn('FName', ['A,B']);
+
+        self::assertSame("FName in('A,B')", $query->toArray()['FilterString']);
     }
 
     public function test_where_org_rejects_empty_org_ids(): void

@@ -7,6 +7,7 @@ namespace Trappistes\Kingdee\K3Cloud\Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use Trappistes\Kingdee\K3Cloud\Client;
 use Trappistes\Kingdee\K3Cloud\Config;
+use Trappistes\Kingdee\K3Cloud\Exception\ConfigurationException;
 use Trappistes\Kingdee\K3Cloud\Http\HttpResponse;
 use Trappistes\Kingdee\K3Cloud\Signer;
 use Trappistes\Kingdee\K3Cloud\Tests\Support\FakeTransport;
@@ -138,6 +139,39 @@ final class SignerTest extends TestCase
                 'acct_id' => 'a',
                 'username' => 'u',
                 'password' => 'p',
+            ]),
+            new FakeTransport(),
+        );
+    }
+
+    public function test_appid_without_secret_part_is_rejected(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('clientId_secret');
+
+        new Signer('myclient', self::APP_SECRET, 'acct', 'user');
+    }
+
+    public function test_empty_app_secret_is_rejected(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('appsecret');
+
+        new Signer(self::APP_ID, '', 'acct', 'user');
+    }
+
+    public function test_client_rejects_invalid_signature_appid(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        new Client(
+            Config::fromArray([
+                'auth_type' => Config::AUTH_SIGNATURE,
+                'host_url' => 'https://x/',
+                'acct_id' => 'a',
+                'username' => 'u',
+                'appid' => 'no-secret-part',
+                'appsecret' => self::APP_SECRET,
             ]),
             new FakeTransport(),
         );

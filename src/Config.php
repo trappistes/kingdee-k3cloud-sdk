@@ -186,6 +186,41 @@ final class Config
     }
 
     /**
+     * 合法配置项名（用于拼写错误提示）
+     */
+    private const PROPERTY_NAMES = [
+        'authType',
+        'hostUrl',
+        'acctId',
+        'username',
+        'password',
+        'appId',
+        'appSecret',
+        'lcid',
+        'timeout',
+        'connectTimeout',
+        'maxAttempts',
+        'orgNum',
+    ];
+
+    /**
+     * 拦截不存在的配置项
+     *
+     * PHP 允许给对象动态添加属性，写错名字时不会报错：
+     *   $config->appid = 'x';   // 拼写错误，实际生效的是 $config->appId
+     * 这会让「已切换账套」的假象成立（旧会话继续被使用），
+     * 所以这里直接报错，把错误暴露在发生的那一刻。
+     */
+    public function __set(string $name, $value): void
+    {
+        throw new InvalidArgumentException(sprintf(
+            '配置项 %s 不存在（合法配置项：%s）；请检查属性名拼写',
+            $name,
+            implode('、', self::PROPERTY_NAMES)
+        ));
+    }
+
+    /**
      * 规范化接口地址（保证以 / 结尾；空值保持为空）
      */
     private static function normalizeHostUrl(string $hostUrl): string
@@ -206,16 +241,48 @@ final class Config
      */
     public function fingerprint(): string
     {
-        return hash('sha256', implode('|', [
-            $this->authType,
-            $this->hostUrl,
-            $this->acctId,
-            $this->username,
-            hash('sha256', $this->password),
-            hash('sha256', $this->appSecret),
-            $this->appId,
-            $this->lcid,
+        return hash('sha256', implode('', [
+            self::fingerprintPart((string) $this->authType),
+            self::fingerprintPart($this->hostUrl),
+            self::fingerprintPart($this->acctId),
+            self::fingerprintPart($this->username),
+            self::fingerprintPart(self::secretHash($this->password, 'password')),
+            self::fingerprintPart(self::secretHash($this->appSecret, 'appSecret')),
+            self::fingerprintPart($this->appId),
+            self::fingerprintPart((string) $this->lcid),
+            // 签名认证的组织维度参与签名串，不同组织不可视为同一实例
+            self::fingerprintPart((string) $this->orgNum),
         ]));
+    }
+
+    /**
+     * 密钥类字段的哈希：非标量直接报错，避免静默算出一个错误指纹
+     *
+     * @param mixed  $value
+     * @param string $name
+     */
+    private static function secretHash($value, string $name): string
+    {
+        if (! is_scalar($value)) {
+            throw new InvalidArgumentException(sprintf(
+                '配置项 %s 必须是标量值（当前类型：%s）',
+                $name,
+                gettype($value)
+            ));
+        }
+
+        return hash('sha256', (string) $value);
+    }
+
+    /**
+     * 指纹片段：长度前缀，避免不同字段组合出相同字符串
+     *
+     * 例：acctId='x|y' + username='z' 与 acctId='x' + username='y|z'
+     * 直接用分隔符拼接会得到同一结果，长度前缀可彻底避免。
+     */
+    private static function fingerprintPart(string $value): string
+    {
+        return strlen($value).':'.$value;
     }
 
     /**
@@ -300,6 +367,15 @@ final class Config
 
         if ($missing !== []) {
             throw new InvalidArgumentException('金蝶客户端配置缺失：'.implode('、', $missing));
+        }
+
+        // cURL 的 CURLOPT_TIMEOUT=0 表示「永不超时」，误配会变成无限等待
+        if ($this->timeout < 1) {
+            throw new InvalidArgumentException(sprintf('超时时间必须大于 0（当前 %d）', $this->timeout));
+        }
+
+        if ($this->connectTimeout < 1) {
+            throw new InvalidArgumentException(sprintf('连接超时时间必须大于 0（当前 %d）', $this->connectTimeout));
         }
     }
 }

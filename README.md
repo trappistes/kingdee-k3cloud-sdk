@@ -154,7 +154,7 @@ $client = new Client($config, new GuzzleTransport(new \GuzzleHttp\Client()));
 
 | 操作 | 策略 | 理由 |
 |---|---|---|
-| `query()` / `metadata()` | 可重试（默认 3 次，指数退避） | 幂等 |
+| `query()` / `metadata()` | 可重试（默认 3 次，线性退避） | 幂等 |
 | `save()` / `delete()` / `unAudit()` / `audit()` / `submit()` | **不重试** | 不幂等，重试=重复单据 |
 | `uploadAttachment()` | **不重试**（超时放宽到 120s） | 重试会产生冗余附件 |
 
@@ -162,17 +162,22 @@ $client = new Client($config, new GuzzleTransport(new \GuzzleHttp\Client()));
 
 ### 2. 会话失效自动重登
 
-登录态过期时，金蝶返回业务错误而非 HTTP 错误。SDK 识别会话失效特征后，
-自动清空 Cookie 并重新登录再重试一次（认证层失败发生在业务执行之前，重试安全）。
+登录态过期时，金蝶返回业务错误而非 HTTP 错误。SDK 识别会话失效特征后：
+
+- **读操作**：自动清空 Cookie 并重新登录，再重试一次（并占用一次重试预算）；
+- **写操作**：**不自动重发**，直接抛 `AuthenticationException`。
+  SDK 无法确认「会话失效」发生时服务端是否已执行业务，重发可能产生重复单据，
+  请由调用方确认后自行重试。
 
 ### 3. 超时与异常分类
 
 | 异常 | 场景 | 是否可重试 |
 |---|---|---|
-| `TransportException` | 网络故障、超时、5xx | 由 `isRetryable()` 标识 |
+| `TransportException` | 网络故障、超时、5xx、4xx（接口不可用） | 由 `isRetryable()` 标识 |
 | `BusinessException` | 金蝶返回 `IsSuccess=false` | 否（带 `errors()` 明细） |
 | `AuthenticationException` | 登录失败（凭据错误） | ❌ |
 | `AuthenticationException`（`isRetryable() === true`） | 登录瞬时故障（如「没有指定数据中心」） | ✅ 自动退避重试 |
+| `AuthenticationException` | 会话失效且为写操作 | ❌（不自动重发） |
 
 ### 4. 多组织建模（金蝶领域模型）
 
@@ -235,6 +240,12 @@ Query::make('BD_MATERIAL')
     ->toArray();                            // 物化为金蝶查询参数
 ```
 
+条件构造规则：
+
+- 多值集合按金蝶写法逐值加引号：`whereIn('FNumber', ['101', '102'])` → `FNumber in('101','102')`；
+- 值中的单引号按 SQL 惯例翻倍转义：`whereEquals('FName', "O'Brien")` → `FName='O''Brien'`；
+- 需要完全自定义的条件，用 `filter()` 传入自行构造的表达式。
+
 ### 7. 查询构造器 `Query`
 
 统一承载金蝶 `BillQuery` 参数，避免各处手工拼接：
@@ -264,10 +275,19 @@ Response::successEntities($raw); // 保存后返回的单据ID
 Response::loginResultType($raw); // 1=登录成功
 ```
 
-### 9. 日志脱敏
+> 只有 **JSON 数组**才被视为查询行；`{}` 这类空对象视为「响应结构异常」并抛
+> `TransportException`，不会被读成「查到 0 行」。
+
+### 9. 日志分级与脱敏
+
+| 事件 | 级别 | 内容 |
+|---|---|---|
+| `kingdee.request` | `info` | 端点与状态码 |
+| `kingdee.request.detail` | `debug` | 脱敏后的请求体与响应体 |
 
 请求体中的 `SendByte`（附件 base64）、`password`、`appsecret` 自动脱敏，
 响应文本超长自动截断，避免日志体积失控。
+业务明细只在 `debug` 级别输出：生产环境保持 `info` 级别时不会把单据内容写进日志。
 
 ### 10. 协议级快速失败
 
@@ -301,9 +321,9 @@ Response::loginResultType($raw); // 1=登录成功
 | `appsecret` | string | `''` | 应用密钥（`auth_type=2/3`） |
 | `lcid` | int | `2052` | 账套语系，2052 = 中文 |
 | `org_num` | int | `0` | 组织编号（签名认证的 AppData 组成项） |
-| `timeout` | int | `30` | 单次请求超时（秒）；附件上传固定放宽到 120s |
-| `connect_timeout` | int | `10` | 连接超时（秒） |
-| `max_attempts` | int | `3` | **读操作**最大尝试次数；写操作恒为 1（不重试） |
+| `timeout` | int | `30` | 单次请求超时（秒）；附件上传固定放宽到 120s；必须 > 0 |
+| `connect_timeout` | int | `10` | 连接超时（秒）；必须 > 0 |
+| `max_attempts` | int | `3` | **读操作**最大尝试次数（含会话失效后的重发）；写操作恒为 1（不重试） |
 
 > 也可用 `Config::fromEnvironment()` 从环境变量读取，默认前缀 `KINGDEE_`。
 

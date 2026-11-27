@@ -65,6 +65,35 @@ final class ResponseTest extends TestCase
         self::assertTrue(Response::isList('[]'));
     }
 
+    public function test_empty_object_is_not_treated_as_empty_rows(): void
+    {
+        // json_decode('{}', true) 也是空数组，若不区分会把异常报文读成「查到 0 行」
+        self::assertFalse(Response::isList('{}'));
+        self::assertSame([], Response::rows('{}'));
+        self::assertFalse(Response::isSuccess('{}'));
+    }
+
+    public function test_missing_is_success_is_not_treated_as_success(): void
+    {
+        // normalize() 与 isSuccess() 对「缺少 IsSuccess」的结论必须一致：不成功
+        $raw = '{"Result":{"ResponseStatus":{"Errors":[{"Message":"编码重复"}]}}}';
+
+        self::assertFalse(Response::isSuccess($raw));
+
+        $this->expectException(TransportException::class);
+        $this->expectExceptionMessage('缺少 IsSuccess');
+
+        Response::normalize($raw);
+    }
+
+    public function test_empty_object_throws_transport_exception(): void
+    {
+        $this->expectException(TransportException::class);
+        $this->expectExceptionMessage('结构异常');
+
+        Response::normalize('{}');
+    }
+
     public function test_login_result_type(): void
     {
         self::assertSame(1, Response::loginResultType('{"LoginResultType":1,"Context":{"SessionId":"x"}}'));

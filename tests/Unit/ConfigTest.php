@@ -38,6 +38,41 @@ final class ConfigTest extends TestCase
         self::assertSame([], $config->missing());
     }
 
+    public function test_timeout_must_be_positive(): void
+    {
+        // cURL 的 CURLOPT_TIMEOUT=0 表示「永不超时」，误配会变成无限等待
+        $config = Config::fromArray([
+            'auth_type' => 1,
+            'host_url' => 'https://k3cloud.example.com/k3cloud',
+            'acct_id' => 'acct',
+            'username' => 'user',
+            'password' => 'secret',
+            'timeout' => 0,
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('超时时间必须大于 0');
+
+        $config->assertValid();
+    }
+
+    public function test_connect_timeout_must_be_positive(): void
+    {
+        $config = Config::fromArray([
+            'auth_type' => 1,
+            'host_url' => 'https://k3cloud.example.com/k3cloud',
+            'acct_id' => 'acct',
+            'username' => 'user',
+            'password' => 'secret',
+            'connect_timeout' => 0,
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('连接超时时间必须大于 0');
+
+        $config->assertValid();
+    }
+
     public function test_missing_items_are_reported(): void
     {
         $config = Config::fromArray([]);
@@ -105,6 +140,60 @@ final class ConfigTest extends TestCase
 
         self::assertSame($base->fingerprint(), $same->fingerprint());
         self::assertNotSame($base->fingerprint(), $diff->fingerprint());
+    }
+
+    public function test_fingerprint_changes_with_org_num(): void
+    {
+        $base = Config::fromArray([
+            'host_url' => 'https://a/',
+            'acct_id' => 'x',
+            'username' => 'u',
+            'password' => 'p',
+            'org_num' => 0,
+        ]);
+        $other = Config::fromArray([
+            'host_url' => 'https://a/',
+            'acct_id' => 'x',
+            'username' => 'u',
+            'password' => 'p',
+            'org_num' => 101,
+        ]);
+
+        // 组织维度参与签名串，不同组织不可视为同一实例
+        self::assertNotSame($base->fingerprint(), $other->fingerprint());
+    }
+
+    public function test_unknown_property_name_is_rejected(): void
+    {
+        $config = Config::fromArray(['host_url' => 'https://a/']);
+
+        // 属性名拼写错误必须报错：否则会静默创建动态属性，
+        // 而 SDK 读的是正确属性名，导致“已切换账套”的假象
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('配置项 appid 不存在');
+
+        $config->appid = 'x';
+    }
+
+    public function test_fingerprint_distinguishes_delimiter_inside_values(): void
+    {
+        $first = Config::fromArray(['host_url' => 'https://a/', 'acct_id' => 'x|y', 'username' => 'z']);
+        $second = Config::fromArray(['host_url' => 'https://a/', 'acct_id' => 'x', 'username' => 'y|z']);
+
+        // 分隔符拼接会产生相同指纹，长度前缀后必须不同
+        self::assertNotSame($first->fingerprint(), $second->fingerprint());
+    }
+
+    public function test_fingerprint_rejects_non_scalar_secret(): void
+    {
+        $config = Config::fromArray(['host_url' => 'https://a/']);
+
+        $config->password = ['not', 'scalar'];
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('password');
+
+        $config->fingerprint();
     }
 
     public function test_from_environment_reads_prefixed_variables(): void

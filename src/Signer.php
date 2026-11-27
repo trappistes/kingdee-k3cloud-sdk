@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Trappistes\Kingdee\K3Cloud;
 
+use Trappistes\Kingdee\K3Cloud\Exception\ConfigurationException;
+
 /**
  * 金蝶开放平台签名认证（第三方授权应用的请求签名）
  *
@@ -63,6 +65,18 @@ final class Signer
         int $lcid = 2052,
         int $orgNum = 0
     ) {
+        // appid 必须是 clientId_secret 形式：否则解不出密钥，签名会静默用空密钥，
+        // 最终只表现为服务端拒绝，排查成本高
+        if (strpos($appId, '_') === false) {
+            throw new ConfigurationException(
+                '签名认证的 appid 必须为 clientId_secret 形式（当前：'.$appId.'）'
+            );
+        }
+
+        if ($appSecret === '') {
+            throw new ConfigurationException('签名认证的 appsecret 不能为空');
+        }
+
         $this->appId = $appId;
         $this->appSecret = $appSecret;
         $this->acctId = $acctId;

@@ -57,12 +57,27 @@ final class Response
 
     /**
      * 是否为查询类的行数组
+     *
+     * 必须是 JSON 数组：JSON 对象（如 {}）即使解码后是空数组，也不视为行数组。
      */
     public static function isList(string $raw): bool
     {
         $data = json_decode($raw, true);
 
-        return is_array($data) && Arr::isList($data);
+        return self::isJsonArray($raw) && is_array($data) && Arr::isList($data);
+    }
+
+    /**
+     * 响应顶层是否为 JSON 数组
+     *
+     * json_decode('{}', true) 与 json_decode('[]', true) 都是空数组，
+     * 只能靠原始文本的首字符区分，否则空对象会被误读成「查到 0 行」。
+     */
+    private static function isJsonArray(string $raw): bool
+    {
+        $trimmed = ltrim($raw);
+
+        return $trimmed !== '' && $trimmed[0] === '[';
     }
 
     /**
@@ -80,8 +95,8 @@ final class Response
     {
         $data = self::decode($raw);
 
-        // 查询类：行数组
-        if (Arr::isList($data)) {
+        // 查询类：行数组（必须是 JSON 数组，空对象不视为空结果）
+        if (self::isJsonArray($raw) && Arr::isList($data)) {
             return $data;
         }
 
@@ -89,8 +104,15 @@ final class Response
         if (isset($data['Result']) && is_array($data['Result'])) {
             $status = $data['Result']['ResponseStatus'] ?? null;
 
-            if (is_array($status) && ($status['IsSuccess'] ?? true) === false) {
-                throw new BusinessException(self::errorMessage($raw), self::errors($raw));
+            if (is_array($status)) {
+                if (! array_key_exists('IsSuccess', $status)) {
+                    // 状态位缺失：报文结构不完整，不能当作成功
+                    throw new TransportException('金蝶响应结构异常：缺少 IsSuccess：'.substr($raw, 0, 200));
+                }
+
+                if ($status['IsSuccess'] === false) {
+                    throw new BusinessException(self::errorMessage($raw), self::errors($raw));
+                }
             }
 
             return $data;
@@ -110,7 +132,7 @@ final class Response
     {
         $data = json_decode($raw, true);
 
-        return is_array($data) && Arr::isList($data) ? $data : [];
+        return self::isJsonArray($raw) && is_array($data) && Arr::isList($data) ? $data : [];
     }
 
     /**
@@ -175,8 +197,8 @@ final class Response
             return ($status['IsSuccess'] ?? false) === true;
         }
 
-        // 查询类无状态位，按是否有数据判断
-        return Arr::isList($data) || isset($data['Result']);
+        // 查询类无状态位，按是否为行数组判断
+        return (self::isJsonArray($raw) && Arr::isList($data)) || isset($data['Result']);
     }
 
     /**

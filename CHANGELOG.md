@@ -11,6 +11,67 @@
 
 ---
 
+## [未发布]
+
+### 修正
+
+- **多值集合条件的写法**：`whereIn()` 改为逐值加引号（`FNumber in('101','102')`），
+  原写法把多个值塞进一个字面量（`in('101,102')`），在金蝶按字面量解析时会静默返回空集。
+  `whereOrg()` 随之修正。
+- **过滤条件值的单引号按 SQL 惯例翻倍转义**：`whereEquals('FName', "O'Brien")` → `FName='O''Brien'`，
+  原实现直接拼接会截断金蝶过滤表达式（可能被解析成另一个条件）。
+  值中的逗号不做处理，多值集合逐值加引号后逗号不再产生歧义。
+  > 转义规则按 SQL 惯例实现，**未在真实金蝶环境验证**；若服务端不接受双写单引号，
+  > 请改用 `filter()` 传入自行构造的条件。
+- **空对象不再被读成「查到 0 行」**：`json_decode('{}', true)` 与 `[]` 一样是空数组，
+  原实现会把 `{}` 当作空行列表。现在只有 **JSON 数组** 才被视为查询行，
+  `Response::normalize('{}')` 抛 `TransportException`（结构异常），
+  `Response::isList('{}')` 与 `Response::isSuccess('{}')` 均返回 `false`。
+- **成功判定不再自相矛盾**：信封中缺少 `IsSuccess` 时，`Response::normalize()` 与
+  `Response::isSuccess()` 现在一致地判定为失败（`normalize()` 抛 `TransportException`），
+  原实现一个当成功、一个当失败。
+- **存在性判断回到第一页**：`exists()` 现在先把 `StartRow` 归零，
+  避免复用带 `offset()` 的查询时检查到第 N 页而误判存在性。
+- **写操作不再自动重发**：会话失效时，写操作直接抛 `AuthenticationException`
+  （“写操作不自动重发，请由调用方确认后重试”），读操作仍可重登后重试。
+  SDK 无法确认服务端返回会话失效前业务是否已执行，重发可能产生重复单据。
+- **重试预算不再被绕过**：会话失效后的重发占用一次尝试额度，
+  总请求数不再超过 `max_attempts`（原实现会多发一次）。
+- **登录超时跟随本次请求的策略**：`request(..., Policy::read(5))` 时登录阶段同样只等 5 秒，
+  原实现登录仍按全局超时（默认 30 秒）阻塞。
+- **拒绝非正数超时**：`Config::assertValid()` 要求 `timeout` 与 `connect_timeout` 均大于 0，
+  避免 `CURLOPT_TIMEOUT=0`（cURL 语义：永不超时）造成无限等待。
+- **4xx 响应归类**：`4xx` 不再把报文原样返回，而是抛 `TransportException`（不可重试），
+  避免上层拿到一段 HTML 后报「响应不是合法 JSON」。
+- **不再重复发送同名请求头**：`CurlTransport` 只在调用方未提供时补充 `Content-Type` / `Accept`，
+  原实现会发出 `Content-Type: application/json, application/json`。
+- **日志分级**：`info` 事件只记端点与状态码，请求体与响应体移到 `debug` 事件，
+  生产环境保持 `info` 级别时不会把单据内容写进日志。
+
+### 兼容性
+
+- **属于行为变更**（当前仍是 `1.0.0-beta` 阶段，未进入稳定版）：
+  - `whereIn()` / `whereOrg()` 生成的 `FilterString` 文本格式变化（逐值加引号）；
+  - 值中的单引号由「直接拼接」改为「翻倍转义」；
+  - `{}` 响应从「空结果」变为 `TransportException`；
+  - 缺少 `IsSuccess` 的信封从「按成功处理」变为失败；
+  - 会话失效时写操作不再自动重发（抛 `AuthenticationException`）；
+  - `4xx` 响应由「返回报文」变为 `TransportException`；
+  - `timeout` / `connect_timeout` 必须大于 0；
+  - 请求体与响应体不再写入 `info` 级日志事件。
+- 公开 API 签名无变更；`Query` / `Response` 的方法集合不变。
+  `login()` / `relogin()` 仅新增可选参数（`?int $timeout`），旧调用方式不受影响。
+
+### 验证
+
+- PHPUnit：104 tests / 301 assertions 全部通过（新增 8 条回归用例）；
+- PHPStan level 5：0 错误；
+- 验证手段仅限单元测试与本机回环，**未连接任何真实金蝶服务器**；
+- **未做实机验证**：金蝶过滤表达式语法、签名算法、会话失效时业务是否已执行、
+  16 个写端点的字段与行为，均未在真实环境核对。
+
+---
+
 ## [1.0.0-beta.2] - 2026-11-14
 
 ### 修正

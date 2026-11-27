@@ -79,7 +79,8 @@ final class Query
 
         $filter = (string) ($params['FilterString'] ?? '');
         if ($filter !== '') {
-            $query->filter(...array_map('trim', explode(' and ', $filter)));
+            // 原样保留为单个条件：按 ' and ' 拆分会切坏值中含该文本的条件
+            $query->filter($filter);
         }
 
         $query->orderBy((string) ($params['OrderString'] ?? ''));
@@ -145,7 +146,7 @@ final class Query
             $value = $value ? 'true' : 'false';
         }
 
-        return $this->filter(sprintf("%s='%s'", $field, $value));
+        return $this->filter(sprintf('%s=%s', $field, self::literal((string) $value)));
     }
 
     /**
@@ -179,12 +180,31 @@ final class Query
             return $this;
         }
 
-        $formatted = implode(',', array_map(
-            static fn ($value): string => is_float($value) ? (string) $value : (string) $value,
-            $values,
-        ));
+        $quoted = [];
 
-        return $this->filter(sprintf("%s in('%s')", $field, $formatted));
+        foreach ($values as $value) {
+            if (! is_scalar($value)) {
+                throw new InvalidArgumentException('集合条件的值必须是标量');
+            }
+
+            if (is_bool($value)) {
+                $value = $value ? 'true' : 'false';
+            }
+
+            $quoted[] = self::literal((string) $value);
+        }
+
+        return $this->filter(sprintf('%s in(%s)', $field, implode(',', $quoted)));
+    }
+
+    /**
+     * 构造字面量
+     *
+     * 值中的单引号按 SQL 惯例翻倍转义，避免截断金蝶过滤表达式。
+     */
+    private static function literal(string $value): string
+    {
+        return "'".str_replace("'", "''", $value)."'";
     }
 
     /**

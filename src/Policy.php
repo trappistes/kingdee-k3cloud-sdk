@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Trappistes\Kingdee\K3Cloud;
 
+use InvalidArgumentException;
+
 /**
  * 操作策略：超时与重试行为
  *
@@ -44,6 +46,11 @@ final class Policy
         bool $retryable,
         int $backoffMs
     ) {
+        // CURLOPT_TIMEOUT=0 表示「永不超时」，误配会变成无限等待
+        if ($timeout < 1) {
+            throw new InvalidArgumentException(sprintf('超时时间必须大于 0（当前 %d）', $timeout));
+        }
+
         $this->name = $name;
         $this->timeout = $timeout;
         $this->maxAttempts = $maxAttempts;

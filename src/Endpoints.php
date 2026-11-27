@@ -135,4 +135,42 @@ final class Endpoints
      * 附件上传
      */
     public const ATTACHMENT_UPLOAD = 'Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.AttachmentUpLoad.common.kdsvc';
+
+    /**
+     * 会改变服务端状态的端点（写操作）
+     *
+     * 这些端点不幂等：网络异常后重试可能产生重复单据、重复消息或冗余附件。
+     * SDK 依据这张表决定请求策略，不依赖调用方自觉。
+     *
+     * @var array<int, string>
+     */
+    public const WRITE_ENDPOINTS = [
+        self::SAVE,
+        self::BATCH_SAVE,
+        self::SUBMIT,
+        self::AUDIT,
+        self::UNAUDIT,
+        self::DRAFT,
+        self::PUSH,
+        self::DELETE,
+        self::ALLOCATE,
+        self::FLEX_SAVE,
+        self::GROUP_SAVE,
+        self::GROUP_DELETE,
+        self::DISASSEMBLY,
+        self::OPERATION,
+        self::WORKFLOW_AUDIT,
+        self::SEND_MSG,
+        self::ATTACHMENT_UPLOAD,
+    ];
+
+    /**
+     * 是否为写端点
+     *
+     * 未知端点按读处理（保留调用方显式指定的策略），已知写端点则禁止可重试策略。
+     */
+    public static function isWrite(string $endpoint): bool
+    {
+        return in_array($endpoint, self::WRITE_ENDPOINTS, true);
+    }
 }

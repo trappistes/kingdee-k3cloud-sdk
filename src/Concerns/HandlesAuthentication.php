@@ -26,10 +26,44 @@ trait HandlesAuthentication
     /**
      * 登录（幂等）
      *
+     * @param int|null $timeout 本次请求的超时预算（秒），为空时用全局配置
+     *
      * @throws AuthenticationException
      * @throws TransportException
      */
-    public function login(): void
+    public function login(?int $timeout = null): void
+    {
+        $this->performLogin($timeout, false);
+    }
+
+    /**
+     * 重新登录：清空会话后再次认证
+     *
+     * @param int|null $timeout 本次请求的超时预算（秒），为空时用全局配置
+     *
+     * @throws AuthenticationException
+     * @throws TransportException
+     */
+    public function relogin(?int $timeout = null): void
+    {
+        $this->performLogin($timeout, true);
+    }
+
+    /**
+     * 执行登录
+     *
+     * 登录成功意味着「当前会话属于当前凭据」，因此：
+     *  - 凭据已变（指纹不同）时，登录前先丢弃旧会话，避免新旧会话并存；
+     *  - 登录成功后同步身份指纹，避免调用方手动登录后又被判定为「身份已变」
+     *    而重复登录一次（那会把刚建好的会话又作废掉）。
+     *
+     * @param int|null $timeout 本次请求的超时预算（秒）
+     * @param bool     $freshSession 是否强制丢弃旧会话
+     *
+     * @throws AuthenticationException
+     * @throws TransportException
+     */
+    private function performLogin(?int $timeout, bool $freshSession): void
     {
         // 签名认证不建立会话：每个请求自带签名
         if ($this->config->authType === Config::AUTH_SIGNATURE) {
@@ -38,16 +72,25 @@ trait HandlesAuthentication
             return;
         }
 
+        $current = $this->config->fingerprint();
+
+        if ($freshSession || $current !== $this->identityFingerprint) {
+            $this->transport->resetSession();
+        }
+
+        // 登录期间视为未认证：失败时不会带着旧会话继续发请求
+        $this->authenticated = false;
+
         [$endpoint, $payload] = $this->authPayload();
 
-        $url = $this->config->hostUrl.$endpoint;
+        $url = rtrim($this->config->hostUrl, '/').'/'.ltrim($endpoint, '/');
 
         $response = $this->transport->post(
             $url,
             $this->headers($url),
             $payload,
             [
-                'timeout' => $this->config->timeout,
+                'timeout' => $timeout ?? $this->config->timeout,
                 'connect_timeout' => $this->config->connectTimeout,
             ],
         );
@@ -82,19 +125,9 @@ trait HandlesAuthentication
         }
 
         $this->authenticated = true;
-    }
 
-    /**
-     * 重新登录：清空会话后再次认证
-     *
-     * @throws AuthenticationException
-     * @throws TransportException
-     */
-    public function relogin(): void
-    {
-        $this->transport->resetSession();
-        $this->authenticated = false;
-        $this->login();
+        // 登录成功：当前会话即当前身份，同步指纹
+        $this->identityFingerprint = $current;
     }
 
     /**
@@ -105,13 +138,19 @@ trait HandlesAuthentication
     private function authPayload(): array
     {
         if ($this->config->authType === Config::AUTH_APP_SECRET) {
-            return [Endpoints::LOGIN_BY_APP_SECRET, [
+            $payload = [
                 'acctid' => $this->config->acctId,
-                'username' => $this->config->username,
                 'appid' => $this->config->appId,
                 'appsecret' => $this->config->appSecret,
                 'lcid' => $this->config->lcid,
-            ]];
+            ];
+
+            // 用户名可选：为空时不下发该字段，避免服务端把空串当作非法用户名
+            if ($this->config->username !== '') {
+                $payload['username'] = $this->config->username;
+            }
+
+            return [Endpoints::LOGIN_BY_APP_SECRET, $payload];
         }
 
         return [Endpoints::LOGIN, [

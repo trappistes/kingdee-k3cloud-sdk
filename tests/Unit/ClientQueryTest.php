@@ -135,6 +135,23 @@ final class ClientQueryTest extends TestCase
         self::assertFalse($client->exists(Query::make('BD_MATERIAL')->fields('FNumber')->whereEquals('FNumber', 'X')));
     }
 
+    public function test_exists_resets_offset(): void
+    {
+        // 存在性判断与分页无关：复用了 offset() 的查询必须从第一页开始，
+        // 否则会拿第 N 页的第一行当存在性结论
+        $transport = new FakeTransport(
+            new HttpResponse(200, '{"LoginResultType":1}'),
+            new HttpResponse(200, '[{"FNumber":"A"}]'),
+        );
+
+        $client = new Client(Config::fromArray(self::CONFIG), $transport);
+
+        $client->exists(Query::make('BD_MATERIAL')->fields('FNumber')->offset(500));
+
+        self::assertSame(0, $transport->requests[1]['payload']['data']['StartRow']);
+        self::assertSame(1, $transport->requests[1]['payload']['data']['Limit']);
+    }
+
     public function test_transport_is_accessible(): void
     {
         $transport = new FakeTransport();
