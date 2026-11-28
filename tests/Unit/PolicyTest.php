@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace Trappistes\Kingdee\K3Cloud\Tests\Unit;
 
@@ -52,5 +52,26 @@ final class PolicyTest extends TestCase
     public function test_backoff_of_non_retryable_policy_is_zero(): void
     {
         self::assertSame(0, Policy::write()->backoffFor(3));
+    }
+
+    /**
+     * 单次尝试策略：性质未知时按不重试处理
+     */
+    public function test_once_policy_never_retries(): void
+    {
+        $policy = Policy::once();
+
+        self::assertSame('once', $policy->name);
+        self::assertFalse($policy->retryable);
+        self::assertSame(1, $policy->maxAttempts);
+        self::assertSame(30, $policy->timeout);
+    }
+
+    /**
+     * 单次尝试策略：超时可透传
+     */
+    public function test_once_policy_accepts_custom_timeout(): void
+    {
+        self::assertSame(45, Policy::once(45)->timeout);
     }
 }

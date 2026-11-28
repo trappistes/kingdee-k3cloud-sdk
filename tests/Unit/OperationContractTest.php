@@ -1,12 +1,13 @@
 <?php
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace Trappistes\Kingdee\K3Cloud\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use Trappistes\Kingdee\K3Cloud\Client;
 use Trappistes\Kingdee\K3Cloud\Config;
+use Trappistes\Kingdee\K3Cloud\Endpoints;
 use Trappistes\Kingdee\K3Cloud\Exception\TransportException;
 use Trappistes\Kingdee\K3Cloud\Http\HttpResponse;
 use Trappistes\Kingdee\K3Cloud\Tests\Support\FakeTransport;
@@ -74,6 +75,89 @@ final class OperationContractTest extends TestCase
             'disassembly' => ['disassembly', 'DynamicFormService.Disassembly.'],
             'workflowAudit' => ['workflowAudit', 'DynamicFormService.WorkflowAudit.'],
         ];
+    }
+
+    /**
+     * 每个写方法用到的端点都必须登记为写端点
+     *
+     * 端点清单是完整分类：漏登记的端点会落到「性质未知」分支，
+     * 拿到的是不重试策略——与写操作的预期一致，但登记缺失会让约束失守。
+     */
+    public function test_every_write_operation_targets_a_registered_write_endpoint(): void
+    {
+        foreach (self::writeOperations() as $case) {
+            [$method] = $case;
+
+            $endpoint = self::endpointOfWrite(static function (Client $client) use ($method): void {
+                $client->{$method}('FORM_ID', ['Model' => ['FNumber' => 'X']]);
+            });
+
+            self::assertTrue(Endpoints::isWrite($endpoint), $method.' 的端点未登记为写端点：'.$endpoint);
+        }
+
+        // 签名与其它写方法不同的三个
+        $special = [
+            'operation' => static function (Client $client): void {
+                $client->operation('FORM_ID', 'ReAudit', ['Model' => []]);
+            },
+            'sendMsg' => static function (Client $client): void {
+                $client->sendMsg(['FMessage' => 'x']);
+            },
+            'uploadAttachment' => static function (Client $client): void {
+                $client->uploadAttachment(['data' => ['SendByte' => 'x']]);
+            },
+        ];
+
+        foreach ($special as $method => $call) {
+            $endpoint = self::endpointOfWrite($call);
+
+            self::assertTrue(Endpoints::isWrite($endpoint), $method.' 的端点未登记为写端点：'.$endpoint);
+        }
+    }
+
+    /**
+     * 执行一次写操作，返回它实际发出的端点
+     *
+     * @param  callable  $call  接收 Client 的回调
+     *
+     * @return string 端点路径
+     */
+    private static function endpointOfWrite(callable $call): string
+    {
+        $transport = new FakeTransport(
+            new HttpResponse(200, '{"LoginResultType":1}'),
+            new HttpResponse(200, '{"Result":{"ResponseStatus":{"IsSuccess":true}}}'),
+        );
+
+        $client = new Client(Config::fromArray(self::CONFIG), $transport);
+
+        $call($client);
+
+        $url = $transport->requests[1]['url'];
+        $host = rtrim(self::CONFIG['host_url'], '/').'/';
+
+        return strpos($url, $host) === 0 ? substr($url, strlen($host)) : $url;
+    }
+
+    /**
+     * 官方标准单据操作应完整提供（协议表面完整性）
+     *
+     * 与 writeOperations() 的分工：那份锁「已登记为写端点」，
+     * 这条锁「方法确实存在」——view 不在写清单里（它是读端点），
+     * 但同样属于官方操作集。
+     */
+    public function test_official_bill_operations_are_available(): void
+    {
+        foreach ([
+                     'save', 'batchSave', 'delete', 'unAudit', 'audit', 'submit', 'draft',
+                     'push', 'view', 'allocate', 'flexSave', 'groupSave', 'groupDelete',
+                     'disassembly', 'workflowAudit', 'operation',
+                 ] as $operation) {
+            self::assertTrue(
+                method_exists(Client::class, $operation),
+                sprintf('Client 应提供官方操作 %s()', $operation),
+            );
+        }
     }
 
     /**
@@ -202,5 +286,28 @@ final class OperationContractTest extends TestCase
         self::assertSame('01000004', $rows[0]['FNumber']);
         self::assertSame('液氨', $rows[0]['FName']);
         self::assertSame('煤', $rows[1]['FName']);
+    }
+
+    /**
+     * ExecuteBillQuery 的信封形态同样能取到行
+     *
+     * 响应形态与行形态是两件事：信封里的 BillQueryResult 才是数据行所在。
+     */
+    public function test_execute_bill_query_rows_accepts_envelope_shape(): void
+    {
+        $transport = new FakeTransport(
+            new HttpResponse(200, '{"LoginResultType":1}'),
+            new HttpResponse(200,
+                '{"Result":{"ResponseStatus":{"IsSuccess":true,"Errors":[]},"BillQueryResult":[["01000004","液氨"]]}}'),
+        );
+
+        $client = new Client(Config::fromArray(self::CONFIG), $transport);
+
+        $rows = $client->executeBillQueryRows(
+            \Trappistes\Kingdee\K3Cloud\Query::make('BD_MATERIAL')->fields('FNumber,FName')
+        );
+
+        self::assertSame('01000004', $rows[0]['FNumber']);
+        self::assertSame('液氨', $rows[0]['FName']);
     }
 }

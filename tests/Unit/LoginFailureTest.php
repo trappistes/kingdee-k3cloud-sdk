@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace Trappistes\Kingdee\K3Cloud\Tests\Unit;
 
@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Trappistes\Kingdee\K3Cloud\Client;
 use Trappistes\Kingdee\K3Cloud\Config;
 use Trappistes\Kingdee\K3Cloud\Exception\AuthenticationException;
+use Trappistes\Kingdee\K3Cloud\Exception\TransportException;
 use Trappistes\Kingdee\K3Cloud\Http\HttpResponse;
 use Trappistes\Kingdee\K3Cloud\Query;
 use Trappistes\Kingdee\K3Cloud\Tests\Support\FakeTransport;
@@ -17,6 +18,9 @@ use Trappistes\Kingdee\K3Cloud\Tests\Support\FakeTransport;
  *
  * 金蝶 ValidateUser 的 LoginResultType：
  *  1 = 成功；0 = 凭据错误（不可重试）；-1 = 服务/数据中心类瞬时故障（可重试）
+ *
+ * 另含登录阶段的网络故障（TransportException）路径——它不经过登录报文，
+ * 但同样属于「登录失败该重试还是该报错」的判定。
  */
 final class LoginFailureTest extends TestCase
 {
@@ -102,6 +106,24 @@ final class LoginFailureTest extends TestCase
         }
 
         // max_attempts=3 → 最多 3 次尝试
+        self::assertSame(3, $transport->requestCount());
+    }
+
+    /**
+     * 登录阶段的网络故障应纳入读操作的重试范围
+     */
+    public function test_login_transport_failure_is_retried(): void
+    {
+        $transport = new FakeTransport(
+            new TransportException('连接失败', 0, true),
+            new HttpResponse(200, '{"LoginResultType":1}'),
+            new HttpResponse(200, '[{"FNumber":"A"}]'),
+        );
+
+        $client = new Client(Config::fromArray(self::CONFIG), $transport);
+
+        self::assertSame('[{"FNumber":"A"}]', $client->query(Query::make('BD_MATERIAL')->fields('FNumber')));
+        // 失败登录 1 次 + 成功登录 1 次 + 查询 1 次
         self::assertSame(3, $transport->requestCount());
     }
 }

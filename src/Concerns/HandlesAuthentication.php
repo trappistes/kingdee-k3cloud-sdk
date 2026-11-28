@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace Trappistes\Kingdee\K3Cloud\Concerns;
 
@@ -12,11 +12,24 @@ use Trappistes\Kingdee\K3Cloud\Response;
 
 /**
  * HandlesAuthentication —— Client 的职责分组之一（仅内部组织，不改变公开 API）
+ *
+ * 职责：认证与会话保持，包括登录、重新登录、登录报文组装。
+ *
+ * 关键约束：
+ *  - 本 trait 中的 public 方法属于 SDK 已冻结的公开 API，只做注释层面的澄清；
+ *  - 认证方式由 Config::authType 决定：账套+用户名+密码、账套+应用ID+密钥、
+ *    开放平台签名；签名认证不建立会话，每个请求自带签名；
+ *  - 登录失败分「可重试」与「不可重试」两类：凭据错误（LoginResultType=0）不可重试，
+ *    服务端/数据中心类瞬时故障（LoginResultType=-1 或响应无法解析）可重试。
  */
 trait HandlesAuthentication
 {
     /**
      * 是否已登录
+     *
+     * 签名认证不建立会话，构造后即为 true。
+     *
+     * @return bool
      */
     public function isAuthenticated(): bool
     {
@@ -24,12 +37,16 @@ trait HandlesAuthentication
     }
 
     /**
-     * 登录（幂等）
+     * 登录：向金蝶发起认证并建立会话
      *
-     * @param int|null $timeout 本次请求的超时预算（秒），为空时用全局配置
+     * 无论当前是否已登录都会真正发起一次登录请求；
+     * 与 relogin() 的区别是本方法不强制丢弃旧会话
+     * （只有身份指纹发生变化时才会重置会话）。
      *
-     * @throws AuthenticationException
-     * @throws TransportException
+     * @param  int|null  $timeout  本次请求的超时预算（秒），为空时用全局配置
+     *
+     * @throws AuthenticationException 凭据错误或金蝶返回登录失败
+     * @throws TransportException      网络故障、超时或登录服务返回错误状态
      */
     public function login(?int $timeout = null): void
     {
@@ -39,10 +56,12 @@ trait HandlesAuthentication
     /**
      * 重新登录：清空会话后再次认证
      *
-     * @param int|null $timeout 本次请求的超时预算（秒），为空时用全局配置
+     * 会话失效或凭据切换后使用：旧 Cookie 被丢弃，确保新会话属于当前凭据。
      *
-     * @throws AuthenticationException
-     * @throws TransportException
+     * @param  int|null  $timeout  本次请求的超时预算（秒），为空时用全局配置
+     *
+     * @throws AuthenticationException 凭据错误或金蝶返回登录失败
+     * @throws TransportException      网络故障、超时或登录服务返回错误状态
      */
     public function relogin(?int $timeout = null): void
     {
@@ -57,11 +76,11 @@ trait HandlesAuthentication
      *  - 登录成功后同步身份指纹，避免调用方手动登录后又被判定为「身份已变」
      *    而重复登录一次（那会把刚建好的会话又作废掉）。
      *
-     * @param int|null $timeout 本次请求的超时预算（秒）
-     * @param bool     $freshSession 是否强制丢弃旧会话
+     * @param  int|null  $timeout  本次请求的超时预算（秒），为空时用全局配置
+     * @param  bool  $freshSession  是否强制丢弃旧会话（true 时无论指纹是否变化都重置）
      *
-     * @throws AuthenticationException
-     * @throws TransportException
+     * @throws AuthenticationException 凭据错误或金蝶返回登录失败
+     * @throws TransportException      网络故障、超时或登录服务返回错误状态
      */
     private function performLogin(?int $timeout, bool $freshSession): void
     {
@@ -95,7 +114,7 @@ trait HandlesAuthentication
             ],
         );
 
-        $this->logger->info('kingdee.login', [
+        $this->log('info', 'kingdee.login', [
             'auth_type' => $this->config->authType,
             'status' => $response->status,
         ]);
@@ -133,7 +152,12 @@ trait HandlesAuthentication
     /**
      * 认证请求参数
      *
-     * @return array{0: string, 1: array<string, mixed>}
+     * 按认证方式选择端点与载荷：
+     *  - 应用ID+密钥：Endpoints::LOGIN_BY_APP_SECRET，载荷含 acctid/appid/appsecret/lcid，
+     *    用户名为空时不下发该字段（避免服务端把空串当作非法用户名）；
+     *  - 用户名+密码：Endpoints::LOGIN，载荷含 acctid/username/password/lcid。
+     *
+     * @return array{0: string, 1: array<string, mixed>} 端点与请求体
      */
     private function authPayload(): array
     {
@@ -153,11 +177,13 @@ trait HandlesAuthentication
             return [Endpoints::LOGIN_BY_APP_SECRET, $payload];
         }
 
-        return [Endpoints::LOGIN, [
-            'acctid' => $this->config->acctId,
-            'username' => $this->config->username,
-            'password' => $this->config->password,
-            'lcid' => $this->config->lcid,
-        ]];
+        return [
+            Endpoints::LOGIN, [
+                'acctid' => $this->config->acctId,
+                'username' => $this->config->username,
+                'password' => $this->config->password,
+                'lcid' => $this->config->lcid,
+            ]
+        ];
     }
 }

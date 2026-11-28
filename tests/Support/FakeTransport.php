@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace Trappistes\Kingdee\K3Cloud\Tests\Support;
 
@@ -26,7 +26,7 @@ final class FakeTransport implements Transport
     private int $sessionResets = 0;
 
     /**
-     * @param HttpResponse|TransportException ...$responses
+     * @param  HttpResponse|TransportException  ...$responses
      */
     public function __construct(...$responses)
     {
@@ -38,10 +38,10 @@ final class FakeTransport implements Transport
     /**
      * 追加预设响应
      *
-     * @param mixed $response
+     * @param  mixed  $response
      */
     /**
-     * @param HttpResponse|TransportException $response
+     * @param  HttpResponse|TransportException  $response
      */
     public function push($response): self
     {

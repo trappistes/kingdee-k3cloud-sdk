@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace Trappistes\Kingdee\K3Cloud\Tests\Unit;
 
@@ -73,6 +73,45 @@ final class ConfigTest extends TestCase
         $config->assertValid();
     }
 
+    /**
+     * 重试次数为 0 会让读操作连一次都不发，必须报错
+     */
+    public function test_max_attempts_must_be_at_least_one(): void
+    {
+        $config = Config::fromArray([
+            'auth_type' => 1,
+            'host_url' => 'https://k3cloud.example.com/k3cloud',
+            'acct_id' => 'acct',
+            'username' => 'user',
+            'password' => 'secret',
+            'max_attempts' => 0,
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('最大尝试次数必须大于等于 1');
+
+        $config->assertValid();
+    }
+
+    /**
+     * 1 表示只发一次（不重试），是合法取值
+     */
+    public function test_max_attempts_of_one_is_valid(): void
+    {
+        $config = Config::fromArray([
+            'auth_type' => 1,
+            'host_url' => 'https://k3cloud.example.com/k3cloud',
+            'acct_id' => 'acct',
+            'username' => 'user',
+            'password' => 'secret',
+            'max_attempts' => 1,
+        ]);
+
+        $config->assertValid();
+
+        self::assertSame(1, $config->maxAttempts);
+    }
+
     public function test_missing_items_are_reported(): void
     {
         $config = Config::fromArray([]);
@@ -136,7 +175,9 @@ final class ConfigTest extends TestCase
     {
         $base = Config::fromArray(['host_url' => 'https://a/', 'acct_id' => 'x', 'username' => 'u', 'password' => 'p']);
         $same = Config::fromArray(['host_url' => 'https://a/', 'acct_id' => 'x', 'username' => 'u', 'password' => 'p']);
-        $diff = Config::fromArray(['host_url' => 'https://a/', 'acct_id' => 'x', 'username' => 'u', 'password' => 'other']);
+        $diff = Config::fromArray([
+            'host_url' => 'https://a/', 'acct_id' => 'x', 'username' => 'u', 'password' => 'other'
+        ]);
 
         self::assertSame($base->fingerprint(), $same->fingerprint());
         self::assertNotSame($base->fingerprint(), $diff->fingerprint());
@@ -215,5 +256,45 @@ final class ConfigTest extends TestCase
         self::assertSame('https://k3cloud.example.com/k3cloud/', $config->hostUrl);
         self::assertSame('acct', $config->acctId);
         self::assertSame([], $config->missing());
+    }
+
+    /**
+     * 凭据不得出现在脱敏配置中
+     */
+    public function test_config_redacted_hides_secrets(): void
+    {
+        $config = Config::fromArray([
+            'auth_type' => 1,
+            'host_url' => 'https://k3cloud.example.com/k3cloud',
+            'acct_id' => 'acct',
+            'username' => 'user',
+            'password' => 'secret',
+            'appid' => 'app',
+            'appsecret' => 'app-secret',
+        ]);
+
+        $redacted = $config->redacted();
+
+        self::assertSame('***', $redacted['password']);
+        self::assertSame('***', $redacted['appsecret']);
+        // 原对象仍保留真值（供实际请求使用）
+        self::assertSame('secret', $config->password);
+    }
+
+    /**
+     * 指纹不应是密码的弱哈希
+     */
+    public function test_fingerprint_is_not_a_plain_md5_of_password(): void
+    {
+        $config = Config::fromArray([
+            'auth_type' => 1,
+            'host_url' => 'https://k3cloud.example.com/k3cloud',
+            'acct_id' => 'acct',
+            'username' => 'user',
+            'password' => 'secret',
+        ]);
+
+        self::assertSame(64, strlen($config->fingerprint()));
+        self::assertStringNotContainsString(md5('secret'), $config->fingerprint());
     }
 }

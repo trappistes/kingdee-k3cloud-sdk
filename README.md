@@ -2,7 +2,7 @@
 
 [![SDK Tests](https://github.com/trappistes/kingdee-k3cloud-sdk/actions/workflows/sdk-tests.yml/badge.svg)](https://github.com/trappistes/kingdee-k3cloud-sdk/actions/workflows/sdk-tests.yml)
 
-金蝶**云星空**（Kingdee K3 Cloud）开放平台 WebAPI 客户端 SDK。
+金蝶 **云星空**（Kingdee K3 Cloud）开放平台 WebAPI 客户端 SDK。
 
 框架无关：不依赖 Laravel / Symfony / PSR 容器，配置由调用方显式注入，日志遵循 PSR-3。
 
@@ -12,28 +12,27 @@
 
 > ### ⚠️ v1.0.0-beta.4（预览版）
 >
-> **方法签名与配置键已冻结**（类、方法签名、配置键、异常体系），beta 期间只做向后兼容的补充；
-> 行为语义的修正会记在 CHANGELOG（beta 期间已发生若干行为变更，见下文兼容性说明）。
+> | 项 | 状态 |
+> |---|---|
+> | 方法签名 / 配置键 | **已冻结**：beta 期只做向后兼容的补充 |
+> | 行为语义 | 仍可能修正，逐条记入 [CHANGELOG](CHANGELOG.md) |
+> | 实机验证覆盖 | 逐项见 [API 一览](#api-一览) 的「实机验证」列与 [实机验证状态](#实机验证状态) |
+> | 环境隔离 | 应用侧责任，SDK 不感知 |
 >
-> 已知限制：
-> - **16 个写类端点尚未在真实 ERP 上验证**（save / audit / submit / push / delete 等）—— 仅有报文契约测试；
-> - **签名认证（`AUTH_SIGNATURE`）尚未实机验证**，需金蝶侧开通第三方授权应用；
-> - 账套的环境隔离（如禁止在开发环境连生产账套）属**应用侧责任**，SDK 不感知此类策略。
->
-> 实机已验证：`ValidateUser` / `BillQuery` / `QueryBusinessInfo` / `view` / `ExecuteBillQuery` /
-> `GetDataCenterList` / `QueryGroupInfo` / `SendMsg`（只读探测，未发送真实消息）。
+> **维护约定**：README 只描述「当前是什么」，不记录「每次改了什么」；版本差异一律写入 CHANGELOG；
+> 状态类信息用表格承载，每版只更新对应单元格，不追加段落。
 
 ---
 
 ## 金蝶三大云产品与本包定位
 
-金蝶的三大云服务各自接口体系不同，**不能共用同一套端点与认证**：
+金蝶的三大云服务各自接口体系不同， **不能共用同一套端点与认证**：
 
-| 产品 | 英文/代号 | 接口特征 | 本包状态 |
-|---|---|---|---|
-| **云星空** | K3 Cloud | 端点 `Kingdee.BOS.WebApi.ServicesStub.*`，账套（acct_id）+ 组织（org_id）模型，认证支持「账套+用户名密码」与「第三方授权应用ID+密钥」 | ✅ 本包实现 |
-| 云星辰 | K3 Star | 端点前缀、单据对象与认证流程均与云星空不同 | ⏳ 后续独立包 `trappistes/kingdee-star-sdk` |
-| 云苍穹 | Cloud Cosmic | 走开放平台 REST（签名鉴权），与 BOS WebAPI 不兼容 | ⏳ 后续独立包 `trappistes/kingdee-cosmic-sdk` |
+| 产品       | 英文/代号    | 接口特征                                                                                                                              | 本包状态                                      |
+|------------|--------------|---------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------|
+| **云星空** | K3 Cloud     | 端点 `Kingdee.BOS.WebApi.ServicesStub.*`，账套（acct_id）+ 组织（org_id）模型，认证支持「账套+用户名密码」与「第三方授权应用ID+密钥」 | ✅ 本包实现                                   |
+| 云星辰     | K3 Star      | 端点前缀、单据对象与认证流程均与云星空不同                                                                                            | ⏳ 后续独立包 `trappistes/kingdee-star-sdk`   |
+| 云苍穹     | Cloud Cosmic | 走开放平台 REST（签名鉴权），与 BOS WebAPI 不兼容                                                                                     | ⏳ 后续独立包 `trappistes/kingdee-cosmic-sdk` |
 
 **因此本包命名空间锁定产品线**：`Trappistes\Kingdee\K3Cloud\*`。
 后续产品各自独立成包，避免误用；公共件（传输、异常、策略）如需多产品共用，
@@ -51,12 +50,18 @@ composer require trappistes/kingdee-k3cloud-sdk
 
 ```json
 {
-    "repositories": [
-        { "type": "path", "url": "packages/*", "options": { "symlink": true } }
-    ],
-    "require": {
-        "trappistes/kingdee-k3cloud-sdk": "^1.0@beta"
+  "repositories": [
+    {
+      "type": "path",
+      "url": "packages/*",
+      "options": {
+        "symlink": true
+      }
     }
+  ],
+  "require": {
+    "trappistes/kingdee-k3cloud-sdk": "^1.0@beta"
+  }
 }
 ```
 
@@ -153,49 +158,63 @@ $client = new Client($config, new GuzzleTransport(new \GuzzleHttp\Client()));
 网络异常意味着「无法确定服务端是否已执行」。对保存类操作自动重试会在金蝶侧生成重复单据。
 因此 SDK 按操作性质分级：
 
-| 操作 | 策略 | 理由 |
-|---|---|---|
-| `query()` / `metadata()` | 可重试（默认 3 次，线性退避） | 幂等 |
-| `save()` / `delete()` / `unAudit()` / `audit()` / `submit()` | **不重试** | 不幂等，重试=重复单据 |
-| `uploadAttachment()` | **不重试**（超时放宽到 120s） | 重试会产生冗余附件 |
+| 操作                                                         | 策略                          | 理由                  |
+|--------------------------------------------------------------|-------------------------------|-----------------------|
+| `query()` / `metadata()`                                     | 可重试（默认 3 次，线性退避） | 幂等                  |
+| `save()` / `delete()` / `unAudit()` / `audit()` / `submit()` | **不重试**                    | 不幂等，重试=重复单据 |
+| `uploadAttachment()`                                         | **不重试**（超时放宽到 120s） | 重试会产生冗余附件    |
 
-写操作超时后请由业务侧做**幂等对账**（例如按业务单号查询是否已存在），而不是依赖 SDK 重试。
+写操作超时后请由业务侧做 **幂等对账**（例如按业务单号查询是否已存在），而不是依赖 SDK 重试。
 
-> **端点级固化**：写端点清单维护在 `Endpoints::WRITE_ENDPOINTS`。
+> **端点级固化**：端点性质由两张清单完整分类 ——
+> `Endpoints::WRITE_ENDPOINTS`（写）与 `Endpoints::READ_ENDPOINTS`（读）。
 > `Client::request()` 对写端点拒绝可重试策略（传入 `Policy::read()` 会抛
-> `InvalidArgumentException`），未显式指定策略时按端点性质推导（写=不重试，读=可重试）。
-> 因此「写端点被误配为读策略」不再依赖调用方自觉。
+> `InvalidArgumentException`），未显式指定策略时按端点性质 **三态**推导：
+>
+> | 端点性质 | 推导出的策略 |
+> |---|---|
+> | 已登记为写端点 | `Policy::write()`（不重试） |
+> | 已登记为读端点 | `Policy::read()`（可重试，最多 `max_attempts` 次） |
+> | **未登记**（用 `request()` 调自定义端点） | `Policy::once()`（**不重试**），并记一条 `kingdee.endpoint.unregistered` warning |
+>
+> 未登记端点按不重试处理，是因为 SDK 无法判断它是否会改变服务端状态，
+> 「不确定」一律放在安全侧 —— 自动重试可能产生重复单据。
+> 确认是只读接口时，显式传 `Policy::read()` 即可恢复自动重试。
 
 ### 2. 会话失效自动重登
 
 登录态过期时，金蝶返回业务错误而非 HTTP 错误。SDK 识别会话失效特征后：
 
 - **读操作**：自动清空 Cookie 并重新登录，再重试一次（并占用一次重试预算）；
-- **写操作**：**不自动重发**，直接抛 `AuthenticationException`。
+- **写操作**： **不自动重发**，直接抛 `AuthenticationException`。
   SDK 无法确认「会话失效」发生时服务端是否已执行业务，重发可能产生重复单据，
   请由调用方确认后自行重试。
 
+> 会话识别 **只认金蝶的语义文案**（如「会话信息已丢失，请重新登录」），
+> 不用字段名 / 标识符做匹配 —— 否则业务报文里恰好出现字段名时会被误判成会话失效。
+> 抛出的 `AuthenticationException` 附带金蝶原始文案，便于区分「会话失效」与「业务失败」。
+
 ### 3. 超时与异常分类
 
-| 异常 | 场景 | 是否可重试 |
-|---|---|---|
-| `TransportException` | 网络故障、超时、5xx、4xx（接口不可用） | 由 `isRetryable()` 标识 |
-| `BusinessException` | 金蝶返回 `IsSuccess=false` | 否（带 `errors()` 明细） |
-| `AuthenticationException` | 登录失败（凭据错误） | ❌ |
-| `AuthenticationException`（`isRetryable() === true`） | 登录瞬时故障（如「没有指定数据中心」） | ✅ 自动退避重试 |
-| `AuthenticationException` | 会话失效且为写操作 | ❌（不自动重发） |
+| 异常                                                  | 场景                                   | 是否可重试               |
+|-------------------------------------------------------|----------------------------------------|--------------------------|
+| `TransportException`                                  | 网络故障、超时、5xx、4xx（接口不可用） | 由 `isRetryable()` 标识  |
+| `BusinessException`                                   | 金蝶返回 `IsSuccess=false`             | 否（带 `errors()` 明细） |
+| `AuthenticationException`                             | 登录失败（凭据错误）                   | ❌                       |
+| `AuthenticationException`（`isRetryable() === true`） | 登录瞬时故障（如「没有指定数据中心」） | ✅ 自动退避重试          |
+| `AuthenticationException`                             | 会话失效且为写操作                     | ❌（不自动重发）         |
 
 ### 4. 多组织建模（金蝶领域模型）
 
-金蝶是典型的**多组织 ERP**：同一套单据体系带多个组织维度，不同单据使用不同字段：
+金蝶是典型的 **多组织 ERP**：同一套单据体系带多个组织维度，不同单据使用不同字段：
 
-| 维度 | 字段 |
-|---|---|
+| 维度     | 字段                                        |
+|----------|---------------------------------------------|
 | 使用组织 | `FUseOrgId`（物料、客户、供应商等基础资料） |
-| 采购组织 | `FPurchaseOrgId`（采购订单、入库单） |
-| 销售组织 | `FSaleOrgId`（销售订单、出库单） |
-| 库存组织 | `FStockOrgId` |
-| 成本组织 | `FCostOrgId` |
+| 采购组织 | `FPurchaseOrgId`（采购订单、入库单）        |
+| 销售组织 | `FSaleOrgId`（销售订单、出库单）            |
+| 库存组织 | `FStockOrgId`                               |
+| 成本组织 | `FCostOrgId`                                |
 
 SDK 负责建模这些维度（协议事实），并提供组织条件原语：
 
@@ -228,12 +247,12 @@ $exists = $client->exists(Query::make('BD_MATERIAL')->fields(['FNumber'])->where
 ```
 
 > **自动翻页的意义**：金蝶 BillQuery 是分页接口，单次最多返回 `Limit` 行。
-> `queryAll()` 按协议推进页码，**避免调用方遗漏翻页导致数据静默截断**
+> `queryAll()` 按协议推进页码， **避免调用方遗漏翻页导致数据静默截断**
 > （实测物料主数据约 2.6 万行 / 259 页，只取第一页会丢掉 2.58 万行）。
 
 ### 6. 查询条件组合
 
-除组织条件外，SDK 只提供**通用的条件原语**：
+除组织条件外，SDK 只提供 **通用的条件原语**：
 
 ```php
 Query::make('BD_MATERIAL')
@@ -273,10 +292,11 @@ Query::make('BD_MATERIAL')
 
 ### 8. 响应形态收敛
 
-金蝶响应有两种形态，SDK 的 `Response` 统一处理，避免业务层把「错误信封」误当成「一行数据」：
+金蝶响应主要有两种形态（查询类的行数组、操作类的信封），SDK 的 `Response` 统一处理，避免业务层把「错误信封」误当成「一行数据」：
 
 ```php
-Response::rows($raw);          // 查询类 → 行数组
+Response::rows($raw);          // 查询类 → 行数组（宽松：失败返回空数组）
+Response::resultRows($raw);    // 查询类 → 数据行（严格：失败或结构异常一律抛异常）
 Response::isSuccess($raw);     // 操作类 → 是否成功
 Response::errors($raw);        // 错误明细
 Response::successEntities($raw); // 保存后返回的单据ID
@@ -285,13 +305,26 @@ Response::loginResultType($raw); // 1=登录成功
 
 > 只有 **JSON 数组**才被视为查询行；`{}` 这类空对象视为「响应结构异常」并抛
 > `TransportException`，不会被读成「查到 0 行」。
+>
+> **取不到数据时要响亮报错**：`resultRows()` 只认两种形态 —— 顶层 JSON 数组，
+> 或信封里的 `Result.BillQueryResult`；两者都不是就抛 `TransportException`，
+> **不会静默返回 0 行**。`queryRows()` / `paginate()` / `executeBillQueryRows()`
+> 都走这条严格路径（「查询失败」不能被当成「无数据」）。
 
 ### 9. 日志分级与脱敏
 
-| 事件 | 级别 | 内容 |
-|---|---|---|
-| `kingdee.request` | `info` | 端点与状态码 |
-| `kingdee.request.detail` | `debug` | 脱敏后的请求体与响应体 |
+| 事件                              | 级别      | 内容                                          |
+|-----------------------------------|-----------|-----------------------------------------------|
+| `kingdee.request`                 | `info`    | 端点与状态码                                  |
+| `kingdee.login`                   | `info`    | 登录成功（含授权类型与状态码）                |
+| `kingdee.identity.changed`        | `info`    | 身份指纹变化，旧会话已作废                    |
+| `kingdee.request.detail`          | `debug`   | 脱敏后的请求体与响应体                        |
+| `kingdee.endpoint.unregistered`   | `warning` | 端点未登记在写 / 读清单中，按不重试处理       |
+| `kingdee.query.truncated`         | `warning` | `queryAll()` 触达 `maxPages` 上限，数据被截断 |
+| `kingdee.transport.failed`        | `warning` | 传输失败；上下文里的 `retryable` 标明是否重试 |
+| `kingdee.auth.failed`             | `warning` | 登录失败；上下文里的 `retryable` 标明是否重试 |
+| `kingdee.session.expired`         | `warning` | 会话失效，已重新登录并重试                    |
+| `kingdee.log.redaction_failed`    | `warning` | 脱敏失败，已退化为只记端点与状态码            |
 
 请求体中的 `SendByte`（附件 base64）、`password`、`appsecret` 自动脱敏，
 响应文本超长自动截断，避免日志体积失控。
@@ -299,9 +332,16 @@ Response::loginResultType($raw); // 1=登录成功
 `<base64 string>`，不写原文；日志中的文件路径、哈希等长字符串不会被误替换。
 业务明细只在 `debug` 级别输出：生产环境保持 `info` 级别时不会把单据内容写进日志。
 
+> **日志是旁路**：日志器自身的异常、以及脱敏过程的异常，都不会冒泡给业务调用方 ——
+> 写操作可能已在金蝶侧成功，此时抛异常会让调用方按失败重试，造成重复单据。
+> 未注入日志器（或注入 `NullLogger`）时，SDK 直接 **跳过脱敏**这一步（纯开销）。
+>
+> 敏感字段的占位形态：标量为 `[omitted:N bytes]`，数组为 `[omitted:array(N)]`，
+> 对象为 `[omitted:object(ClassName)]`，资源为 `[omitted:resource]`。
+
 ### 10. 协议级快速失败
 
-金蝶 BillQuery 必填 `FormId` 与 `FieldKeys`。SDK 在**发请求前**本地校验，
+金蝶 BillQuery 必填 `FormId` 与 `FieldKeys`。SDK 在 **发请求前**本地校验，
 缺失时直接抛 `ConfigurationException`，避免一次无意义的网络往返：
 
 ```
@@ -310,7 +350,7 @@ Response::loginResultType($raw); // 1=登录成功
 
 ### 11. 传输层
 
-- 默认 `CurlTransport`：**零第三方依赖**；Cookie 由 cURL 内置引擎管理（遵循 Domain/Path 作用域匹配）；
+- 默认 `CurlTransport`： **零第三方依赖**；Cookie 由 cURL 内置引擎管理（遵循 Domain/Path 作用域匹配）；
   同一 Client 生命周期内复用句柄，保留连接缓存，避免每次请求重复 TCP + TLS 握手；
 - 可自行实现 `Transport` 接口接入其他 HTTP 客户端（见上）。
 
@@ -320,20 +360,20 @@ Response::loginResultType($raw); // 1=登录成功
 
 `Config::fromArray()` 使用的键名如下（同时兼容 camelCase 别名）：
 
-| 键名 | 类型 | 默认 | 说明 |
-|---|---|---|---|
-| `auth_type` | int | `1` | `1` 账套+密码；`2` 第三方授权；`3` 开放平台签名 |
-| `host_url` | string | `''` | 金蝶接口地址，如 `https://k3cloud.example.com/k3cloud/` |
-| `acct_id` | string | `''` | 账套 ID |
-| `username` | string | `''` | 用户名（`auth_type=1` 必填；`auth_type=2` 可选，为空时登录载荷不下发该字段；`auth_type=3` 参与签名 AppData） |
-| `password` | string | `''` | 密码（仅 `auth_type=1`） |
-| `appid` | string | `''` | 应用 ID（`auth_type=2/3`）；签名认证格式必须为 `clientId_secret`，否则构造时报错 |
-| `appsecret` | string | `''` | 应用密钥（`auth_type=2/3`） |
-| `lcid` | int | `2052` | 账套语系，2052 = 中文 |
-| `org_num` | int | `0` | 组织编号（签名认证的 AppData 组成项） |
-| `timeout` | int | `30` | 单次请求超时（秒）；附件上传固定放宽到 120s；必须 > 0 |
-| `connect_timeout` | int | `10` | 连接超时（秒）；必须 > 0 |
-| `max_attempts` | int | `3` | **读操作**最大尝试次数（含会话失效后的重发）；写操作恒为 1（不重试） |
+| 键名              | 类型   | 默认   | 说明                                                                                                         |
+|-------------------|--------|--------|--------------------------------------------------------------------------------------------------------------|
+| `auth_type`       | int    | `1`    | `1` 账套+密码；`2` 第三方授权；`3` 开放平台签名                                                              |
+| `host_url`        | string | `''`   | 金蝶接口地址，如 `https://k3cloud.example.com/k3cloud/`                                                      |
+| `acct_id`         | string | `''`   | 账套 ID                                                                                                      |
+| `username`        | string | `''`   | 用户名（`auth_type=1` 必填；`auth_type=2` 可选，为空时登录载荷不下发该字段；`auth_type=3` 参与签名 AppData） |
+| `password`        | string | `''`   | 密码（仅 `auth_type=1`）                                                                                     |
+| `appid`           | string | `''`   | 应用 ID（`auth_type=2/3`）；签名认证格式必须为 `clientId_secret`，否则构造时报错                             |
+| `appsecret`       | string | `''`   | 应用密钥（`auth_type=2/3`）                                                                                  |
+| `lcid`            | int    | `2052` | 账套语系，2052 = 中文                                                                                        |
+| `org_num`         | int    | `0`    | 组织编号（签名认证的 AppData 组成项）；`0` 表示不限定组织                                                    |
+| `timeout`         | int    | `30`   | 单次请求超时（秒）；附件上传固定放宽到 120s；必须 > 0                                                        |
+| `connect_timeout` | int    | `10`   | 连接超时（秒）；必须 > 0                                                                                     |
+| `max_attempts`    | int    | `3`    | **读操作**最大尝试次数（含会话失效后的重发）；必须 ≥ 1，`1` 表示只发一次（不重试）；写操作恒为 1（不重试）   |
 
 > 也可用 `Config::fromEnvironment()` 从环境变量读取，默认前缀 `KINGDEE_`。
 >
@@ -345,7 +385,7 @@ Response::loginResultType($raw); // 1=登录成功
 > 避免拼写错误被静默忽略（旧会话继续被当成新身份使用）。
 >
 > **Config 是活对象**：`$client->config()` 返回的就是内部那个配置对象，修改它会影响后续请求。
-> 为避免改坏后静默发请求，SDK 在**每次请求前**重新校验配置（必填项、超时 > 0），
+> 为避免改坏后静默发请求，SDK 在 **每次请求前**重新校验配置（必填项、超时 > 0、重试次数 ≥ 1），
 > 不合法直接抛 `InvalidArgumentException`。需要固定配置时请自行克隆一份再传入。
 >
 > **改配置分两类**：
@@ -425,8 +465,8 @@ try {
 
 ## 分页与大批量同步
 
-金蝶 BillQuery 是**分页接口**，单次最多返回 `Limit` 行（上限 2000）。
-漏掉翻页会造成**静默数据截断**（实测物料主数据约 2.6 万行 / 259 页）。
+金蝶 BillQuery 是 **分页接口**，单次最多返回 `Limit` 行（上限 2000）。
+漏掉翻页会造成 **静默数据截断**（实测物料主数据约 2.6 万行 / 259 页）。
 
 ```php
 // 自动翻页，逐行产出（不占内存，适合大批量同步）
@@ -454,6 +494,10 @@ while (true) {
 }
 ```
 
+> **`maxPages` 是安全阀**：触达上限时 `queryAll()` 会停止翻页，并记一条
+> `kingdee.query.truncated` warning（需注入日志器才可见）——
+> 此时的产出是 **被截断的**，不是「拉完了」。
+>
 > **增量同步建议**：用 `FModifyDate` 作为游标，只同步「上次游标之后」的记录；
 > 翻页只解决「取全」，不解决「取哪些」。
 
@@ -461,25 +505,47 @@ while (true) {
 
 ## 单据写入实践
 
-所有单据写操作的报文结构一致：`{formid, data}`，`data` 即单据体。
+所有单据写操作的 **信封**一致：`{formid, data}`；但 `data` 的内容按操作而不同（已在真实帐套实测）：
+
+| 操作                                              | `data` 内容                                         | 说明                                              |
+|---------------------------------------------------|-----------------------------------------------------|---------------------------------------------------|
+| `save()`                                          | `Model`（可另带 `NeedUpDateFields` 等可选键）       | 单据体本体，值为对象                              |
+| `batchSave()` / `flexSave()`                      | `Model` 为**数组的数组**（`[['FNumber' => …], …]`） | 批量 / 柔性保存；传对象会报「不能转换为数组类型」 |
+| `submit()` / `audit()` / `unAudit()` / `delete()` | `Ids`（单据内码，多个用逗号分隔）                   | 只按内码定位单据，**不接受 `Model`**              |
 
 ```php
-$payload = [
-    'IsAutoSubmitAndAudit'   => true,   // 保存后自动提交并审核
-    'IsVerifyBaseDataField'  => true,   // 校验基础资料字段
+// 1) 保存：报文是单据体
+$raw = $client->save('SAL_SaleOrder', [
+    'IsAutoSubmitAndAudit'  => true,   // 保存后自动提交并审核
+    'IsVerifyBaseDataField' => true,   // 校验基础资料字段
     'Model' => [
         'FNumber' => 'XSDD000001',
-        // 明细体
+        // 明细体：分录标识与字段以该表单元数据为准
         'FQuoteEntry' => [[ 'FMaterialId' => ['FNumber' => '01000004'] ]],
     ],
-];
+]);
 
-$client->save('SAL_SaleOrder', $payload);   // 保存
-$client->submit('SAL_SaleOrder', $payload); // 提交
-$client->audit('SAL_SaleOrder', $payload);  // 审核
-$client->unAudit('SAL_SaleOrder', $payload);// 反审核
-$client->delete('SAL_SaleOrder', $payload); // 删除
+// 2) 取保存结果的内码（响应里有两处位置，见下）
+$decoded = Response::decode($raw);
+$id = $decoded['Result']['Id']
+    ?? Response::successEntities($raw)[0]['Id']
+    ?? null;
+
+// 3) 提交 / 审核 / 反审核 / 删除：报文是内码列表
+$client->submit('SAL_SaleOrder', ['Ids' => (string) $id]);
+$client->audit('SAL_SaleOrder', ['Ids' => (string) $id]);
+$client->unAudit('SAL_SaleOrder', ['Ids' => (string) $id]);
+$client->delete('SAL_SaleOrder', ['Ids' => (string) $id]);
 ```
+
+> ⚠️ 用 `Model` 去调 `submit()` / `audit()` / `unAudit()` / `delete()` 会被金蝶拒绝，
+> 错误文案是「 **编码值或内码值必须传其一**」——它不提示参数位置不对，很容易排查到别处去。
+>
+> 保存响应的内码可能出现在 `Result.Id` 或 `Result.ResponseStatus.SuccessEntitys[0].Id`，两处都出现过；
+> `Response::successEntities($raw)` 直接读后者，省去手写路径。
+>
+> `save()` 按编码新增，同一编码再保存会被拒（「组织内编码唯一」）；“按内码更新单据”属于金蝶的
+> 自定义操作（`operation()`），具体操作号以金蝶接口文档为准，SDK 未封装。
 
 **自定义操作**（变更、关闭、重新审核等）：
 
@@ -487,35 +553,42 @@ $client->delete('SAL_SaleOrder', $payload); // 删除
 $client->operation('SAL_SaleOrder', 'ReAudit', ['Model' => ['FNumber' => 'XSDD000001']]);
 ```
 
-> ⚠️ 写操作**不会自动重试**。若网络超时，服务端可能已建单 —— 请按业务单号做幂等对账
+> ⚠️ 写操作 **不会自动重试**。若网络超时，服务端可能已建单 —— 请按业务单号做幂等对账
 > （用 `exists()` 查询是否已存在），而不是重试。
 
 ---
 
 ## 附件上传实践
 
-附件挂在**单据**上，`FormId` / `BillNo` / `InterId` / `EntryKey` / `EntryInterId` 共同定位归属：
+附件挂在 **单据**上，`FormId` / `BillNo` / `InterId` / `EntryKey` / `EntryInterId` 共同定位归属：
 
 ```php
+// 附件端点的参数要整体放在 data 节点下（SDK 原样透传，不会自动包裹）
 $raw = $client->uploadAttachment([
-    'FormId'       => 'SAL_SaleOrder',           // 附件所属单据对象
-    'BillNo'       => 'XSDD000001',              // 单据编号
-    'InterId'      => 100025,                    // 单据内码
-    'EntryKey'     => 'FSaleOrderEntry',         // 分录标识
-    'EntryInterId' => 100028,                    // 分录内码
-    'FileName'     => '磅单.pdf',
-    'AliasFileName'=> '磅单.pdf',
-    'SendByte'     => base64_encode(file_get_contents('/path/to/ticket.pdf')),
-    'IsLast'       => 'true',
-    'FileId'       => '',
+    'data' => [
+        'FormId'       => 'SAL_SaleOrder',           // 附件所属单据对象
+        'BillNo'       => 'XSDD000001',              // 单据编号
+        'InterId'      => 100025,                    // 单据内码
+        'EntryKey'     => 'FSaleOrderEntry',         // 分录标识
+        'EntryInterId' => 100028,                    // 分录内码
+        'FileName'     => '磅单.pdf',
+        'AliasFileName'=> '磅单.pdf',
+        'SendByte'     => base64_encode(file_get_contents('/path/to/ticket.pdf')),
+        'IsLast'       => 'true',
+        'FileId'       => '',
+    ],
 ]);
 
 $fileId = Response::decode($raw)['Result']['FileId'] ?? null;
 ```
 
-> 金蝶**没有删除附件的接口**（`BOS_Attachment` 是系统基础资料，不能作为业务单据删除）。
+> 金蝶 **没有删除附件的接口**（`BOS_Attachment` 是系统基础资料，不能作为业务单据删除）。
 > 避免附件堆积的做法：上传前先按单据查询已有附件并跳过/替换；
 > 或把附件挂到会随单据删除而级联清理的单据上。
+>
+> 实测（基础资料 `BD_Customer`）：附件参数按上面的 `data` 包裹提交即成功，
+> 返回 `Result.FileId` 与 `Result.ResponseStatus.SuccessEntitys[0].Id`（附件内码）。
+> 附件记录本身不随挂载对象一起消失 —— 挂基础资料会在金蝶里留下独立附件记录。
 
 ---
 
@@ -537,6 +610,9 @@ $client = new Client($config, logger: $logger);
 日志内容已脱敏：附件二进制（`SendByte`）、`password`、`appsecret` 会被替换为 `[omitted:N bytes]`；
 报文中其它位置出现的 Base64 内容会被替换为 `<base64 string>`。
 
+> 敏感字段是按 **键名**屏蔽的：附件字节流必须放在 `SendByte` 键下才会被屏蔽，
+> 放在自定义键名下则不会被屏蔽（该内容会原样进入 debug 日志）。
+
 ---
 
 ## 常见问题
@@ -545,7 +621,7 @@ $client = new Client($config, logger: $logger);
 A：金蝶数据中心的瞬时故障，SDK 会自动退避重试。若持续出现，检查 `host_url` 与网络连通性。
 
 **Q：查询结果字段错位 / 取不到值**
-A：两个查询接口的行结构不同 —— `BillQuery` 返回对象行，`ExecuteBillQuery` 返回**数组行**。
+A：两个查询接口的行结构不同 —— `BillQuery` 返回对象行，`ExecuteBillQuery` 返回 **数组行**。
 后者请用 `executeBillQueryRows()`（自动映射为对象行）。
 
 **Q：如何确认账号可用**
@@ -553,6 +629,20 @@ A：调用 `getDataCenterList()`，能返回即说明连接、认证正常。
 
 **Q：如何排查一次请求**
 A：注入带 `debug` 级别的 PSR-3 日志器，SDK 会记录端点、状态码、脱敏后的请求体与响应体。
+
+**Q：用 `request()` 调自定义端点，为什么不自动重试？**
+A：自定义端点没登记在写 / 读清单里，SDK 无法判断它会不会改变服务端状态，
+「不确定」一律按不重试处理（安全侧）。确认是只读接口就显式传 `Policy::read()`：
+
+```php
+$client->request('Kingdee.BOS.WebApi.ServicesStub.XXX.common.kdsvc', ['data' => $payload], Policy::read());
+```
+
+**Q：查询取不到数据，为什么抛异常而不是返回空数组？**
+A：「查询失败」不等于「没有数据」。SDK 会区分两者：
+金蝶返回业务失败（`IsSuccess=false`）抛 `BusinessException`，
+响应结构无法识别抛 `TransportException`——都不会被当成「查到 0 行」。
+要原始报文自己判断，用 `query()`（返回字符串）。
 
 **Q：能不能在开发环境连生产账套**
 A：SDK 不做环境隔离（它只关心「怎么连」）。请在应用侧实现：在构造客户端之前校验账套是否被允许，
@@ -582,7 +672,7 @@ composer require trappistes/kingdee-k3cloud-sdk:^1.0@beta
 
 ## 版本策略
 
-- `1.0.0-beta.x`：**方法签名与配置键已冻结**，仅做向后兼容的补充（行为语义的修正会记在 CHANGELOG）；
+- `1.0.0-beta.x`： **方法签名与配置键已冻结**，仅做向后兼容的补充（行为语义的修正会记在 CHANGELOG）；
 - `1.0.0`：正式版，移除 beta 标记；
 - 语义化版本：破坏性变更走主版本号，功能新增走次版本号，修复走修订号。
 
@@ -590,30 +680,80 @@ composer require trappistes/kingdee-k3cloud-sdk:^1.0@beta
 
 ## 异常体系
 
-| 异常 | 场景 | 可重试 |
-|---|---|---|
-| `TransportException` | 网络故障、超时、5xx、接口不可用 | 由 `isRetryable()` 标识 |
-| `BusinessException` | 金蝶返回 `IsSuccess=false` | 否（附 `errors()` 明细） |
-| `AuthenticationException` | 登录失败（凭据错误） | ❌ |
-| `AuthenticationException`（`isRetryable() === true`） | 登录瞬时故障（如「没有指定数据中心」） | ✅ 自动退避重试 |
-| `ConfigurationException` | 配置缺失、查询参数缺失 | 否（需修正配置） |
-| `InvalidArgumentException` | API 误用（如传入非 `Query`） | 否（需修正调用） |
+| 异常                                                  | 场景                                   | 可重试                   |
+|-------------------------------------------------------|----------------------------------------|--------------------------|
+| `TransportException`                                  | 网络故障、超时、5xx、接口不可用        | 由 `isRetryable()` 标识  |
+| `BusinessException`                                   | 金蝶返回 `IsSuccess=false`             | 否（附 `errors()` 明细） |
+| `AuthenticationException`                             | 登录失败（凭据错误）                   | ❌                       |
+| `AuthenticationException`（`isRetryable() === true`） | 登录瞬时故障（如「没有指定数据中心」） | ✅ 自动退避重试          |
+| `ConfigurationException`                              | 配置缺失、查询参数缺失                 | 否（需修正配置）         |
+| `InvalidArgumentException`                            | API 误用（如传入非 `Query`）           | 否（需修正调用）         |
+
+> `KingdeeException` 覆盖的是 **SDK 协议层**的异常（配置、传输、金蝶业务失败）。
+> `InvalidArgumentException`（API 误用）继承 `LogicException`， **不是** `KingdeeException` 的子类 ——
+> 只捕获 `KingdeeException` 兜不住全部失败，需要连同 `InvalidArgumentException` 一起捕获。
+
+---
+
+## 实机验证状态
+
+**验证环境**：真实金蝶云星空帐套（账套账号 + 用户名密码认证），2026-11-28。 **验证方式**：真实 HTTP 调用 —— 只读查询 +
+带唯一标记的自建基础资料（客户），
+覆盖保存 / 批量保存 / 柔性保存 / 草稿 / 提交 / 审核 / 反审核 / 删除 / 附件上传 / 查看；
+所有测试记录均已删除并只读复核为 0 残留，未改动任何既有业务数据。
+
+### 协议级实测结论
+
+| 协议约定                          | 实测结论                                                                                            |
+|-----------------------------------|-----------------------------------------------------------------------------------------------------|
+| 会话失效的错误文案                | 金蝶返回「会话信息已丢失，请重新登录」，SDK 的会话识别能命中                                        |
+| 会话失效后的读请求                | 自动重新登录并重试（业务 → 登录 → 业务，共 3 次 HTTP）                                              |
+| 会话失效后的写请求                | **不自动重发**：抛 `AuthenticationException`，服务端只收到 1 个请求                                 |
+| 提交 / 审核 / 反审核 / 删除的报文 | 用 `Ids`（内码），不是 `Model`                                                                      |
+| 保存响应的内码位置                | `Result.Id` 或 `Result.ResponseStatus.SuccessEntitys[0].Id`（`Response::successEntities()` 读后者） |
+| 查看（`view()`）的报文            | `data` 直接放 `Id`（内码）或 `Number`（编码）；**不能套 `model`**，否则报「编码或内码必须传其一」   |
+| 批量保存 / 柔性保存的报文         | `Model` 必须是**数组的数组**；传对象报「不能转换为数组类型」                                        |
+| 柔性保存后的删除                  | 直接 `delete()` 会被拒，需先 `audit()` → `unAudit()` → `delete()`                                   |
+| 附件上传的报文                    | 参数整体放 `data` 节点下，返回 `Result.FileId`                                                      |
+| 编码长度与必填项                  | 金蝶按元数据校验（如客户编码 ≤ 30 字符），违规报 `MsgCode=11` 验证失败                              |
+| 过滤值的单引号                    | `O'Brien` → `O''Brien` 被金蝶接受（**命中语义未验证**：帐套内无含单引号的数据）                     |
+| 多值集合条件                      | `FNumber in('a','b')` 被金蝶接受且命中正确                                                          |
+| 组织条件                          | `FUseOrgId.FNumber in('101')` 被金蝶接受且命中正确                                                  |
+| 字段标识写错                      | 金蝶返回「元数据中标识为 XXX 的字段不存在」，SDK 归类为 `BusinessException`                         |
+
+### 未验证项
+
+| 项                                        | 原因                                                                                                                                                                | 解除条件                                   |
+|-------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------|
+| 单据类（含明细行）写链路                  | 写链路骨架已在基础资料上验证；但含明细行的单据需按各表单元数据补齐单位、销售员、发货位置、结算组织等必填项，且单据编号自动生成、审核会触及业务流                    | 可造可删单据的测试环境 + 各表单元数据      |
+| 签名认证（`AUTH_SIGNATURE`）              | 未开通第三方授权应用。签名规则已与官方参考实现 `kingdee-php/k3cloud` 逐项核对一致                                                                                   | 金蝶侧开通应用并提供 `appid` / `appsecret` |
+| `push()` / `allocate()` / `disassembly()` | 下推会产生衍生单据；分配 / 拆解涉及库存与应收                                                                                                                       | 隔离的库存测试帐套                         |
+| `workflowAudit()` / `operation()`         | 需要流程实例 / 自定义操作语义未确认                                                                                                                                 | 金蝶侧给出该操作的报文规范                 |
+| `sendMsg()`                               | 会向真人发送通知                                                                                                                                                    | 接收方可控的测试环境                       |
+| `groupSave()` / `groupDelete()`           | 分组报文需要 `FNumber` / `FormId` 语义（实测报「参数 FNumber 必传」「参数 FormId 必传」），且分组记录没有删除路径                                                   | 金蝶侧给出分组接口规范                     |
+| HTTP 4xx / 5xx 路径                       | SDK 的状态码分支已用假传输离线验证（读重试 / 读恢复 / 4xx 不重试 / 写不重试 / 登录 4xx）；但金蝶一律返回 200 + 业务错误，未拿到真实 4xx / 5xx 样本                  | 由代理层制造 4xx / 5xx                     |
+| 查询响应的**信封形态**                    | 实测返回的是顶层行数组；SDK 另兼容信封形态（数据行在 `Result.BillQueryResult`），但该键名未在真实帐套复核。键名不符时抛 `TransportException`，**不会静默返回 0 行** | 金蝶返回信封形态的查询样本                 |
+| 深翻页 / 大结果集                         | 未涉及大批量同步                                                                                                                                                    | 大数据量帐套                               |
 
 ---
 
 ## API 一览
 
-| 分类 | 方法 |
-|---|---|
-| 会话 | `login()` / `relogin()` / `isAuthenticated()` |
-| 查询 | `query()`（BillQuery）/ `queryRows()` / `queryAll()` / `paginate()` / `exists()` / `executeBillQuery()` / `executeBillQueryRows()` / `metadata()` / `view()` |
-| 单据写入 | `save()` / `batchSave()` / `delete()` / `unAudit()` / `audit()` / `submit()` / `draft()` / `push()` / `allocate()` / `flexSave()` / `groupSave()` / `groupDelete()` / `disassembly()` / `workflowAudit()` / `operation()` |
-| 平台 | `sendMsg()` / `queryGroupInfo()` / `getDataCenterList()` |
-| 附件 | `uploadAttachment()` |
-| 进阶 | `request()`（任意端点）、`config()` / `transport()` |
+| 分类     | 方法                                                                                                                                              | 实机验证                        |
+|----------|---------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------|
+| 会话     | `login()` / `relogin()` / `isAuthenticated()`                                                                                                     | ✅                              |
+| 查询     | `query()`（BillQuery）/ `queryRows()` / `queryAll()` / `paginate()` / `exists()` / `executeBillQuery()` / `executeBillQueryRows()` / `metadata()` | ✅                              |
+| 查询     | `view()`                                                                                                                                          | ✅（`data.Id` / `data.Number`） |
+| 单据写入 | `save()` / `submit()` / `audit()` / `unAudit()` / `delete()`                                                                                      | ✅ 基础资料                     |
+| 单据写入 | `batchSave()` / `draft()` / `flexSave()`                                                                                                          | ✅ 基础资料                     |
+| 单据写入 | `push()` / `allocate()` / `groupSave()` / `groupDelete()` / `disassembly()` / `workflowAudit()` / `operation()`                                   | ⚠️ 仅契约测试                   |
+| 平台     | `sendMsg()` / `queryGroupInfo()` / `getDataCenterList()`                                                                                          | ⚠️ 仅契约测试                   |
+| 附件     | `uploadAttachment()`                                                                                                                              | ✅ 基础资料挂载                 |
+| 进阶     | `request()`（任意端点）、`config()` / `transport()`                                                                                               | —                               |
 
 > 单据操作已覆盖金蝶官方 WebAPI 的标准操作集（端点同构，报文统一为 `formid` + `data`）；
 > 未列出的端点可直接调用 `request()`，无需改动 SDK。
+> 各类方法的报文差异（保存用 `Model`、提交审核删除用 `Ids`）见 [单据写入实践](#单据写入实践)。
 
 ---
 

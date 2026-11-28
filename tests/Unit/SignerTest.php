@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace Trappistes\Kingdee\K3Cloud\Tests\Unit;
 
@@ -125,23 +125,6 @@ final class SignerTest extends TestCase
         );
 
         self::assertTrue($client->isAuthenticated());
-    }
-
-    public function test_unsupported_auth_type_is_rejected(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('不支持的授权类型');
-
-        new Client(
-            Config::fromArray([
-                'auth_type' => 9,
-                'host_url' => 'https://x/',
-                'acct_id' => 'a',
-                'username' => 'u',
-                'password' => 'p',
-            ]),
-            new FakeTransport(),
-        );
     }
 
     public function test_appid_without_secret_part_is_rejected(): void

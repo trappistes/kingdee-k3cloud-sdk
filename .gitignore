@@ -16,3 +16,8 @@ composer.lock
 .idea/
 .vscode/
 *.swp
+
+# AI 开发工具
+.claude
+.pi
+CLAUDE.md

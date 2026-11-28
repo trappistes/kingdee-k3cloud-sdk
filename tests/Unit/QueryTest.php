@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace Trappistes\Kingdee\K3Cloud\Tests\Unit;
 
@@ -176,5 +176,52 @@ final class QueryTest extends TestCase
     {
         self::assertSame('FNumber,FName', Query::make('X')->fields('FNumber, FName')->toArray()['FieldKeys']);
         self::assertSame('FNumber,FName', Query::make('X')->fields(['FNumber', ' FName '])->toArray()['FieldKeys']);
+    }
+
+    /**
+     * 重复字段会被去掉，且保留首次出现的顺序
+     *
+     * 重复列会让金蝶返回重复列，列数与字段数不一致时 mapRows() 会错位。
+     */
+    public function test_fields_deduplicates_keeping_first_occurrence_order(): void
+    {
+        self::assertSame(
+            'FNumber,FName',
+            Query::make('X')->fields('FNumber,FName,FNumber')->toArray()['FieldKeys']
+        );
+
+        self::assertSame(
+            'FNumber,FName',
+            Query::make('X')->fields(['FNumber', 'FName', 'FNumber'])->toArray()['FieldKeys']
+        );
+
+        // 去重后 fieldKeys() 与 FieldKeys 保持一致
+        self::assertSame(
+            ['FNumber', 'FName'],
+            Query::make('X')->fields('FNumber,FName,FNumber,FName')->fieldKeys()
+        );
+    }
+
+    /**
+     * fromArray() 走同一条路径，重复字段同样被去掉
+     */
+    public function test_from_array_deduplicates_field_keys(): void
+    {
+        $query = Query::fromArray([
+            'FormId' => 'BD_MATERIAL',
+            'FieldKeys' => 'FNumber,FName,FNumber',
+        ]);
+
+        self::assertSame('FNumber,FName', $query->toArray()['FieldKeys']);
+    }
+
+    /**
+     * 组织维度常量只保留已在真实响应中验证过的项
+     */
+    public function test_org_fields_only_contains_verified_dimensions(): void
+    {
+        $constants = (new \ReflectionClass(OrgFields::class))->getConstants();
+
+        self::assertSame(['USE', 'PURCHASE', 'SALE'], array_keys($constants));
     }
 }

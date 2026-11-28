@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace Trappistes\Kingdee\K3Cloud\Support;
 
@@ -14,7 +14,12 @@ final class Arr
     /**
      * 判断数组是否为连续索引的列表
      *
-     * @param array<mixed> $array
+     * 等价于 PHP 8.1 的 array_is_list()：键必须从 0 开始且连续递增。
+     * 空数组视为列表。
+     *
+     * @param  array  $array  待判断的数组
+     *
+     * @return bool true 表示键为 0,1,2... 的连续列表
      */
     public static function isList(array $array): bool
     {

@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace Trappistes\Kingdee\K3Cloud\Exception;
 
@@ -12,12 +12,19 @@ namespace Trappistes\Kingdee\K3Cloud\Exception;
 class BusinessException extends KingdeeException
 {
     /**
+     * 金蝶返回的错误明细，每项通常包含错误码与错误信息
+     *
      * @var array<int, array<string, mixed>>
      */
-    protected $errors;
+    protected array $errors;
 
     /**
-     * @param array<int, array<string, mixed>> $errors 金蝶返回的错误明细
+     * 构造业务异常
+     *
+     * @param  string  $message  异常信息（通常是金蝶返回的失败原因）
+     * @param  array<int, array<string, mixed>>  $errors  金蝶返回的错误明细，可为空
+     *
+     * @return void
      */
     public function __construct(string $message, array $errors = [])
     {
@@ -29,7 +36,7 @@ class BusinessException extends KingdeeException
     /**
      * 错误明细
      *
-     * @return array<int, array<string, mixed>>
+     * @return array<int, array<string, mixed>> 金蝶返回的错误明细，无错误时为空数组
      */
     public function errors(): array
     {

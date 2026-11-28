@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace Trappistes\Kingdee\K3Cloud\Tests\Unit;
 
@@ -34,6 +34,61 @@ final class RedactorTest extends TestCase
         self::assertSame('[omitted:6 bytes]', $payload['password']);
         self::assertSame('[omitted:7 bytes]', $payload['appsecret']);
         self::assertSame('[omitted:13 bytes]', $payload['data']['password']);
+    }
+
+    /**
+     * 敏感键的值为数组：只描述规模，不得做字符串强转
+     *
+     * 数组强转会触发 Warning（框架的错误处理器下变成 ErrorException），
+     * 而脱敏位于业务成功路径上 —— 抛出去会中断**已成功**的请求。
+     */
+    public function test_array_value_under_hidden_key_is_summarized(): void
+    {
+        $payload = Redactor::payload(['SendByte' => ['a', 'b']]);
+
+        self::assertSame('[omitted:array(2)]', $payload['SendByte']);
+    }
+
+    /**
+     * 敏感键的值为对象：只描述类型，不得做字符串强转
+     *
+     * 对象强转会抛 PHP 原生 Error（Throwable 但不是 Exception）。
+     */
+    public function test_object_value_under_hidden_key_is_summarized(): void
+    {
+        $payload = Redactor::payload(['SendByte' => new \stdClass()]);
+
+        self::assertSame('[omitted:object(stdClass)]', $payload['SendByte']);
+    }
+
+    /**
+     * 敏感键的值为资源：只描述类型
+     */
+    public function test_resource_value_under_hidden_key_is_summarized(): void
+    {
+        $handle = fopen('php://memory', 'rb');
+
+        $payload = Redactor::payload(['SendByte' => $handle]);
+
+        fclose($handle);
+
+        self::assertSame('[omitted:resource]', $payload['SendByte']);
+    }
+
+    /**
+     * 标量与 null 的占位格式不变（既有日志解析依赖该格式）
+     */
+    public function test_scalar_hidden_key_format_is_unchanged(): void
+    {
+        $payload = Redactor::payload([
+            'password' => 'secret',
+            'appsecret' => '',
+            'SendByte' => null,
+        ]);
+
+        self::assertSame('[omitted:6 bytes]', $payload['password']);
+        self::assertSame('[omitted:0 bytes]', $payload['appsecret']);
+        self::assertSame('[omitted:0 bytes]', $payload['SendByte']);
     }
 
     public function test_long_text_is_truncated(): void
