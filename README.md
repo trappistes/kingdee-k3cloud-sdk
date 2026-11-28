@@ -10,7 +10,7 @@
 
 ---
 
-> ### ⚠️ v1.0.0-beta.3（预览版）
+> ### ⚠️ v1.0.0-beta.4（预览版）
 >
 > **方法签名与配置键已冻结**（类、方法签名、配置键、异常体系），beta 期间只做向后兼容的补充；
 > 行为语义的修正会记在 CHANGELOG（beta 期间已发生若干行为变更，见下文兼容性说明）。
@@ -295,6 +295,8 @@ Response::loginResultType($raw); // 1=登录成功
 
 请求体中的 `SendByte`（附件 base64）、`password`、`appsecret` 自动脱敏，
 响应文本超长自动截断，避免日志体积失控。
+报文里出现的 **Base64 大段内容**（附件字节流、base64 图片等）会被统一替换为
+`<base64 string>`，不写原文；日志中的文件路径、哈希等长字符串不会被误替换。
 业务明细只在 `debug` 级别输出：生产环境保持 `info` 级别时不会把单据内容写进日志。
 
 ### 10. 协议级快速失败
@@ -532,7 +534,8 @@ $logger = new Monolog\Logger('k3cloud', [
 $client = new Client($config, logger: $logger);
 ```
 
-日志内容已脱敏：附件二进制（`SendByte`）、`password`、`appsecret` 会被替换为 `[omitted:N bytes]`。
+日志内容已脱敏：附件二进制（`SendByte`）、`password`、`appsecret` 会被替换为 `[omitted:N bytes]`；
+报文中其它位置出现的 Base64 内容会被替换为 `<base64 string>`。
 
 ---
 
