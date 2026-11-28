@@ -10,12 +10,12 @@
 
 ---
 
-> ### ⚠️ v1.0.0-beta.4（预览版）
+> ### ✅ v1.0.0（正式版）
 >
 > | 项 | 状态 |
 > |---|---|
-> | 方法签名 / 配置键 | **已冻结**：beta 期只做向后兼容的补充 |
-> | 行为语义 | 仍可能修正，逐条记入 [CHANGELOG](CHANGELOG.md) |
+> | 方法签名 / 配置键 | **已冻结**：破坏性变更走主版本号 |
+> | 行为语义 | 缺陷走修订号修正，逐条记入 [CHANGELOG](CHANGELOG.md) |
 > | 实机验证覆盖 | 逐项见 [API 一览](#api-一览) 的「实机验证」列与 [实机验证状态](#实机验证状态) |
 > | 环境隔离 | 应用侧责任，SDK 不感知 |
 >
@@ -60,7 +60,7 @@ composer require trappistes/kingdee-k3cloud-sdk
     }
   ],
   "require": {
-    "trappistes/kingdee-k3cloud-sdk": "^1.0@beta"
+    "trappistes/kingdee-k3cloud-sdk": "^1.0"
   }
 }
 ```
@@ -661,7 +661,7 @@ A：SDK 不做环境隔离（它只关心「怎么连」）。请在应用侧实
 
 ```bash
 # Packagist（推荐）
-composer require trappistes/kingdee-k3cloud-sdk:^1.0@beta
+composer require trappistes/kingdee-k3cloud-sdk:^1.0
 
 # 直接引用 Git 仓库（未发布 tag 时）
 # 在消费方 composer.json 中加入：
@@ -672,8 +672,7 @@ composer require trappistes/kingdee-k3cloud-sdk:^1.0@beta
 
 ## 版本策略
 
-- `1.0.0-beta.x`： **方法签名与配置键已冻结**，仅做向后兼容的补充（行为语义的修正会记在 CHANGELOG）；
-- `1.0.0`：正式版，移除 beta 标记；
+- `1.0.0`：正式版。**公开 API（方法签名 / 配置键 / 异常体系）冻结**，进入常规维护；
 - 语义化版本：破坏性变更走主版本号，功能新增走次版本号，修复走修订号。
 
 ---

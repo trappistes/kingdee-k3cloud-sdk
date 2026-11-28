@@ -16,11 +16,11 @@ git grep -nE "(password|appsecret)\s*=\s*['\"][^'\"]+" -- src tests   # 应无�
 # 2. 确认 CI 全绿（§4.2 的 6 个 Job）
 
 # 3. 打 tag —— 提交必须确定，Packagist 收录后引用即固定（见 §5.2）
-git tag -a v1.0.0-beta.N -m "1.0.0-beta.N"
-git push origin v1.0.0-beta.N
+git tag -a v1.0.0 -m "1.0.0"
+git push origin v1.0.0
 
 # 4. 建 Release
-gh release create v1.0.0-beta.N --title "v1.0.0-beta.N" --prerelease --notes-file CHANGELOG.md
+gh release create v1.0.0 --title "v1.0.0" --notes-file CHANGELOG.md
 
 # 5. 提交 Packagist 收录（首次）或等待其自动同步（§5.3）
 ```
@@ -33,8 +33,8 @@ gh release create v1.0.0-beta.N --title "v1.0.0-beta.N" --prerelease --notes-fil
 
 | 形态                            | 适用场景          | 消费方安装方式                                                                               |
 |---------------------------------|-------------------|----------------------------------------------------------------------------------------------|
-| 公共仓库（Packagist）           | 开源分发          | `composer require trappistes/kingdee-k3cloud-sdk:^1.0@beta`                                  |
-| 私有仓库（自建 Composer / VCS） | 企业内部分发      | `composer require trappistes/kingdee-k3cloud-sdk:^1.0@beta` + 仓库配置                       |
+| 公共仓库（Packagist）           | 开源分发          | `composer require trappistes/kingdee-k3cloud-sdk:^1.0`                             |     
+| 私有仓库（自建 Composer / VCS） | 企业内部分发      | `composer require trappistes/kingdee-k3cloud-sdk:^1.0` + 仓库配置                  |     
 | Git 仓库直接引用                | 灰度 / 未发布 tag | `"repositories": [{"type":"vcs","url":"git@github.com:trappistes/kingdee-k3cloud-sdk.git"}]` |
 
 包本身 **不依赖任何框架**（无 Laravel / Symfony / Illuminate 依赖），消费方无需适配。
@@ -122,14 +122,14 @@ find src tests -name '*.php' -print0 | xargs -0 -n1 php7.4 -l
 
 ```bash
 git init && git add -A
-git commit -m "feat: 金蝶云星空 WebAPI SDK 首个预览版"
+git commit -m "feat: 金蝶云星空 WebAPI SDK"
 git remote add origin git@github.com:trappistes/kingdee-k3cloud-sdk.git
 git push -u origin main
 ```
 
 > 若包目录仍位于主项目的 `packages/` 下，需要用 `git filter-repo` /
 > `git subtree split` 拆分历史，或直接以一次初始提交重新建仓
-> （推荐，beta 阶段无历史负担）。
+> （推荐，初期无历史负担）。
 
 ### 5.2 打 tag
 
@@ -138,7 +138,7 @@ git push -u origin main
 > ⚠️ **发布前务必确定 tag 指向的提交无误。** Packagist 收录后，
 > 该版本的 `source.reference` 即被固定；之后即使强制移动 tag，
 > Packagist **不会**重新解析，已收录的版本会永久指向旧提交。
-> 若发现打错了 tag，只能发补丁版本（如 `1.0.0-beta.2`）修正，
+> 若发现打错了 tag，只能发补丁版本（如 `1.0.1`）修正，
 > 而不能靠移动 tag 收回。
 
 ```bash
@@ -147,21 +147,21 @@ git status
 git pull --ff-only
 
 # 2. 打 tag（message 与版本号一致）
-git tag -a v1.0.0-beta.1 -m "1.0.0-beta.1"
+git tag -a v1.0.0 -m "1.0.0"
 
 # 3. 推送 tag
-git push origin v1.0.0-beta.1
+git push origin v1.0.0
 ```
 
 Tag 必须是 `v` 前缀（Composer 识别 `v1.0.0` 与 `1.0.0` 等价，`v` 前缀更通用）。
 
-> 注意：`git push origin v1.0.0-beta.1` 偶发 `src refspec does not match any`
+> 注意：`git push origin v1.0.0` 偶发 `src refspec does not match any`
 > （本地 tag 与远端 ref 解析不一致），改用 `git push origin --tags` 可正常推送。
 
 创建 GitHub Release（可选，但便于展示 CHANGELOG）：
 
 ```bash
-gh release create v1.0.0-beta.1 --title "v1.0.0-beta.1" --notes-file CHANGELOG.md
+gh release create v1.0.0 --title "v1.0.0" --notes-file CHANGELOG.md
 ```
 
 ### 5.3 发布到 Composer 仓库
@@ -174,7 +174,7 @@ gh release create v1.0.0-beta.1 --title "v1.0.0-beta.1" --notes-file CHANGELOG.m
 1. 打开 https://packagist.org/packages/submit
 2. 提交仓库地址 `trappistes/kingdee-k3cloud-sdk`（GitHub 会弹出授权请求，需登录并授权）
 3. 确认包页面 https://packagist.org/packages/trappistes/kingdee-k3cloud-sdk
-   上出现 `v1.0.0-beta.1`
+   上出现 `v1.0.0`
 
 因包内无 `version` 字段，版本来自 **tag**。首次提交后抓取需数分钟，
 期间 `composer require` 报 `could not find a version matching` 属正常现象。
@@ -213,7 +213,7 @@ gh release create v1.0.0-beta.1 --title "v1.0.0-beta.1" --notes-file CHANGELOG.m
     }
   ],
   "require": {
-    "trappistes/kingdee-k3cloud-sdk": "^1.0@beta"
+    "trappistes/kingdee-k3cloud-sdk": "^1.0"
   }
 }
 ```
@@ -225,7 +225,7 @@ composer update trappistes/kingdee-k3cloud-sdk --prefer-dist
 ### 5.4 消费方验证
 
 ```bash
-composer require trappistes/kingdee-k3cloud-sdk:^1.0@beta
+composer require trappistes/kingdee-k3cloud-sdk:^1.0
 composer show trappistes/kingdee-k3cloud-sdk   # 确认版本号为本次发布的版本
 php -r 'require "vendor/autoload.php"; var_dump(class_exists(\Trappistes\Kingdee\K3Cloud\Client::class));'
 ```
@@ -258,7 +258,7 @@ php -r 'require "vendor/autoload.php"; var_dump(class_exists(\Trappistes\Kingdee
     }
   ],
   "require": {
-    "trappistes/kingdee-k3cloud-sdk": "^1.0@beta"
+    "trappistes/kingdee-k3cloud-sdk": "^1.0"
   }
 }
 ```
@@ -275,9 +275,9 @@ rm -rf vendor/trappistes && composer update trappistes/kingdee-k3cloud-sdk --pre
 |------------------------|-------------------------------------------------------------------------------------------------------------------|
 | 消费方回退到上一个 tag | `composer require trappistes/kingdee-k3cloud-sdk:<上一个版本号>`                                                  |
 | 撤回已发布版本         | 删除远端 tag（`git push origin :refs/tags/vX.Y.Z`），**并到 Packagist 手动删除该版本** —— 仅删 tag 不会清除其索引 |
-| 发布后发现缺陷         | 发补丁版本（如 `1.0.0-beta.2`），不可移动已有 tag（见 §5.2）                                                      |
+| 发布后发现缺陷         | 发补丁版本（如 `1.0.1`），不可移动已有 tag（见 §5.2）                                                       |
 
-> 因 beta 阶段 API 已冻结， **不兼容变更必须走新主版本**（如 `2.0.0-beta.1`），
+> 因 API 已冻结， **不兼容变更必须走新主版本**（如 `2.0.0`），
 > 不可在同一主版本内删除或改变公开方法签名。
 
 ---
